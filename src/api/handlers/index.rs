@@ -38,7 +38,11 @@ pub struct IndexResponse {
 pub async fn get_index(abot: web::Data<Abot>) -> Result<Json<IndexResponse>, ApiError> {
     let config = CONFIG.clone();
 
-    if let Err(e) = &abot.matrix().send_public_message(&"__test_message__", None).await {
+    if let Err(e) = &abot
+        .matrix()
+        .send_public_message(&"__test_message__", None)
+        .await
+    {
         return Err(ApiError::InternalServerError(e.to_string()));
     }
 

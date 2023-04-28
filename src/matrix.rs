@@ -490,10 +490,10 @@ impl Matrix {
                 Commands::Help => self.reply_help(&room_id).await?,
                 Commands::Subscribe(report, who) => {
                     match report {
-                        ReportType::Alerts(severity) => {
-                            if let Some(severity) = severity {
+                        ReportType::Alerts(optional) => {
+                            if let Some((member, severity)) = optional {
                                 // Write alerts,severity,user in subscribers file if doesn't already exist
-                                let subscriber = format!("alerts,{severity},{who}\n");
+                                let subscriber = format!("alerts,{member},{severity},{who}\n");
                                 if Path::new(&subscribers_filename).exists() {
                                     let subscribers = fs::read_to_string(&subscribers_filename)?;
                                     let mut x = 0;
@@ -513,20 +513,23 @@ impl Matrix {
                                             .open(&subscribers_filename)?;
                                         file.write_all(subscriber.as_bytes())?;
                                         let message = format!(
-                                            "📥 New subscription! <i>{} {severity}</i> subscribed",
+                                            "📥 New subscription! <i>{}</i> subscribed",
                                             report.name()
                                         );
                                         self.send_private_message(who, &message, Some(&message))
                                             .await?;
                                     } else {
-                                        let message = format!("👍 It's here! {} {severity}</i> is already subscribed.", report.name());
+                                        let message = format!(
+                                            "👍 It's here! <i>{}</i> is already subscribed.",
+                                            report.name()
+                                        );
                                         self.send_private_message(who, &message, Some(&message))
                                             .await?;
                                     }
                                 } else {
                                     fs::write(&subscribers_filename, subscriber)?;
                                     let message = format!(
-                                        "📥 New subscription! <i>{} {severity}</i> subscribed",
+                                        "📥 New subscription! <i>{}</i> subscribed",
                                         report.name()
                                     );
                                     self.send_private_message(who, &message, Some(&message))
@@ -541,20 +544,18 @@ impl Matrix {
                 }
                 Commands::Unsubscribe(report, who) => {
                     match report {
-                        ReportType::Alerts(severity) => {
-                            if let Some(severity) = severity {
+                        ReportType::Alerts(optional) => {
+                            if let Some((member, severity)) = optional {
                                 // Remove severity,user from subscribers file
-                                let subscriber = format!("alerts,{severity},{who}\n");
+                                let subscriber = format!("alerts,{member},{severity},{who}\n");
                                 let path =
                                     format!("{}{}", config.data_path, MATRIX_SUBSCRIBERS_FILENAME);
                                 if Path::new(&path).exists() {
                                     let subscribers = fs::read_to_string(&path)?;
                                     if subscribers.contains(&subscriber) {
                                         fs::write(&path, subscribers.replace(&subscriber, ""))?;
-                                        let message = format!(
-                                            "🗑️ <i>{} {severity}</i> unsubscribed",
-                                            report.name()
-                                        );
+                                        let message =
+                                            format!("🗑️ <i>{}</i> unsubscribed", report.name());
                                         self.send_private_message(who, &message, Some(&message))
                                             .await?;
                                     }
@@ -818,20 +819,38 @@ impl Matrix {
                                         "!subscribe" => match value.split_once(' ') {
                                             None => commands.push(Commands::NotSupported),
                                             Some((report_type, params)) => match report_type {
-                                                "alerts" => match params {
-                                                    "high" => commands.push(Commands::Subscribe(
-                                                        ReportType::Alerts(Some(Severity::High)),
-                                                        message.sender.to_string(),
-                                                    )),
-                                                    "medium" => commands.push(Commands::Subscribe(
-                                                        ReportType::Alerts(Some(Severity::Medium)),
-                                                        message.sender.to_string(),
-                                                    )),
-                                                    "low" => commands.push(Commands::Subscribe(
-                                                        ReportType::Alerts(Some(Severity::Low)),
-                                                        message.sender.to_string(),
-                                                    )),
-                                                    _ => commands.push(Commands::NotSupported),
+                                                "alerts" => match params.split_once(' ') {
+                                                    None => commands.push(Commands::NotSupported),
+                                                    Some((member, severity)) => match severity {
+                                                        "high" => {
+                                                            commands.push(Commands::Subscribe(
+                                                                ReportType::Alerts(Some((
+                                                                    member.to_string(),
+                                                                    Severity::High,
+                                                                ))),
+                                                                message.sender.to_string(),
+                                                            ))
+                                                        }
+                                                        "medium" => {
+                                                            commands.push(Commands::Subscribe(
+                                                                ReportType::Alerts(Some((
+                                                                    member.to_string(),
+                                                                    Severity::Medium,
+                                                                ))),
+                                                                message.sender.to_string(),
+                                                            ))
+                                                        }
+                                                        "low" => {
+                                                            commands.push(Commands::Subscribe(
+                                                                ReportType::Alerts(Some((
+                                                                    member.to_string(),
+                                                                    Severity::Low,
+                                                                ))),
+                                                                message.sender.to_string(),
+                                                            ))
+                                                        }
+                                                        _ => commands.push(Commands::NotSupported),
+                                                    },
                                                 },
                                                 _ => commands.push(Commands::NotSupported),
                                             },
@@ -839,24 +858,38 @@ impl Matrix {
                                         "!unsubscribe" => match value.split_once(' ') {
                                             None => commands.push(Commands::NotSupported),
                                             Some((report_type, params)) => match report_type {
-                                                "alerts" => match params {
-                                                    "high" => commands.push(Commands::Unsubscribe(
-                                                        ReportType::Alerts(Some(Severity::High)),
-                                                        message.sender.to_string(),
-                                                    )),
-                                                    "medium" => {
-                                                        commands.push(Commands::Unsubscribe(
-                                                            ReportType::Alerts(Some(
-                                                                Severity::Medium,
-                                                            )),
-                                                            message.sender.to_string(),
-                                                        ))
-                                                    }
-                                                    "low" => commands.push(Commands::Unsubscribe(
-                                                        ReportType::Alerts(Some(Severity::Low)),
-                                                        message.sender.to_string(),
-                                                    )),
-                                                    _ => commands.push(Commands::NotSupported),
+                                                "alerts" => match params.split_once(' ') {
+                                                    None => commands.push(Commands::NotSupported),
+                                                    Some((member, severity)) => match severity {
+                                                        "high" => {
+                                                            commands.push(Commands::Unsubscribe(
+                                                                ReportType::Alerts(Some((
+                                                                    member.to_string(),
+                                                                    Severity::High,
+                                                                ))),
+                                                                message.sender.to_string(),
+                                                            ))
+                                                        }
+                                                        "medium" => {
+                                                            commands.push(Commands::Unsubscribe(
+                                                                ReportType::Alerts(Some((
+                                                                    member.to_string(),
+                                                                    Severity::Medium,
+                                                                ))),
+                                                                message.sender.to_string(),
+                                                            ))
+                                                        }
+                                                        "low" => {
+                                                            commands.push(Commands::Unsubscribe(
+                                                                ReportType::Alerts(Some((
+                                                                    member.to_string(),
+                                                                    Severity::Low,
+                                                                ))),
+                                                                message.sender.to_string(),
+                                                            ))
+                                                        }
+                                                        _ => commands.push(Commands::NotSupported),
+                                                    },
                                                 },
                                                 _ => commands.push(Commands::NotSupported),
                                             },
@@ -1030,9 +1063,9 @@ impl Matrix {
 
     pub async fn reply_help(&self, room_id: &str) -> Result<(), MatrixError> {
         let mut message = String::from("✨ Supported commands:<br>");
-        message.push_str("<b>!subscribe alerts <i>SEVERITY</i></b> - Subscribe to IBP-monitor alerts by SEVERITY. All severity options available are: high, medium, low<br>");
+        message.push_str("<b>!subscribe alerts <i>MEMBER</i> <i>SEVERITY</i></b> - Subscribe to IBP-monitor alerts by MEMBER and SEVERITY. All severity options available are: high, medium, low<br>");
         message.push_str(
-            "<b>!unsubscribe alerts <i>SEVERITY</i></b> - Unsubscribe to IBP-monitor alerts by SEVERITY.<br>",
+            "<b>!unsubscribe alerts <i>MEMBER</i> <i>SEVERITY</i></b> - Unsubscribe to IBP-monitor alerts by MEMBER and SEVERITY.<br>",
         );
         message.push_str("<b>!help</b> - Print this message.<br>");
         message.push_str("——<br>");
