@@ -38,7 +38,6 @@ const CACHE_POOL_EXPIRE_SECONDS: u64 = 60;
 pub type RedisPool = Pool<RedisConnectionManager>;
 pub type RedisConn = Connection<RedisConnectionManager>;
 
-
 pub fn get_redis_url(config: Config) -> String {
     format!(
         "redis://:{}@{}/{}",

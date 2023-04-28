@@ -82,6 +82,8 @@ fn spawn_and_restart_matrix_lazy_load_on_error() {
     });
 }
 
+type Member = String;
+
 #[derive(Debug, Deserialize, Clone, PartialEq)]
 pub enum Severity {
     High,
@@ -107,22 +109,16 @@ impl Default for Severity {
 
 #[derive(Debug, Deserialize, Clone, PartialEq)]
 pub enum ReportType {
-    Alerts(Option<Severity>),
+    Alerts(Option<(Member, Severity)>),
 }
 
 impl ReportType {
     pub fn name(&self) -> String {
         match &self {
-            Self::Alerts(severity) => {
-                if severity.is_none() {
-                    "All Alerts".to_string()
-                } else {
-                    format!(
-                        "Alerts with {} severity",
-                        severity.clone().unwrap_or_default()
-                    )
-                }
+            Self::Alerts(Some((member, severity))) => {
+                format!("Alerts from {} with {} severity", member, severity)
             }
+            Self::Alerts(None) => "Alerts format not supported".to_string(),
         }
     }
 }
@@ -130,7 +126,7 @@ impl ReportType {
 impl std::fmt::Display for ReportType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Alerts(_severity) => write!(f, "Alerts"),
+            Self::Alerts(_option) => write!(f, "Alerts"),
         }
     }
 }
