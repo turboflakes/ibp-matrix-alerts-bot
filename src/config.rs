@@ -42,12 +42,12 @@ lazy_static! {
     pub static ref CONFIG: Config = get_config();
 }
 
-/// provides default value for interval if ABOT_INTERVAL env var is not set
-fn default_interval() -> u64 {
-    21600
+/// provides default value (minutes) for mute_time if ABOT_MUTE_TIME env var is not set
+fn default_mute_time() -> u32 {
+    5
 }
 
-/// provides default value for error interval if ABOT_ERROR_INTERVAL env var is not set
+/// provides default value (minutes) for error interval if ABOT_ERROR_INTERVAL env var is not set
 fn default_error_interval() -> u64 {
     30
 }
@@ -87,8 +87,8 @@ pub struct Config {
     // general configuration
     #[serde(default)]
     pub members_json_url: String,
-    #[serde(default = "default_interval")]
-    pub interval: u64,
+    #[serde(default = "default_mute_time")]
+    pub mute_time: u32,
     #[serde(default = "default_error_interval")]
     pub error_interval: u64,
     #[serde(default)]

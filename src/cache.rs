@@ -19,7 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use crate::abot::{Severity, MemberId};
+use crate::abot::{MemberId, Severity};
 use crate::config::{Config, CONFIG};
 use crate::errors::CacheError;
 use actix_web::web;
@@ -88,9 +88,9 @@ pub type MuteTime = u32;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum CacheKey {
-    Members,                                    // Set
-    Subscribers(MemberId, Severity),              // Set
-    SubscriberConfig(Who, MemberId, Severity),    // Hash
+    Members,                                   // Set
+    Subscribers(MemberId, Severity),           // Set
+    SubscriberConfig(Who, MemberId, Severity), // Hash
 }
 
 impl std::fmt::Display for CacheKey {

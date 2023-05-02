@@ -7,9 +7,9 @@ Subscribe to Alerts published by ibp-monitor and delivery over matrix
 - [&check;] implement http server with shared state (cache and matrix)
 - [&check;] load members from json config file
 - [&check;] review matrix commands:
-    - [&check;] !subscribe alerts MEMBER SEVERITY
+    - [&check;] !subscribe alerts MEMBER SEVERITY [MUTE_INTERVAL]
     - [&check;] !unsubscribe alerts MEMBER SEVERITY
     - [&check;] !help
+- [&check;] allow configuration of mute time interval
 - [ ] implement /alerts webhook
-- [ ] allow configuration of mute time interval
 - [ ] define alert message template

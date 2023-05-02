@@ -19,17 +19,17 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use crate::cache::{create_or_await_pool, RedisPool, get_conn, CacheKey};
+use crate::cache::{create_or_await_pool, get_conn, CacheKey, MuteTime, RedisPool};
 use crate::config::{Config, CONFIG};
 use crate::errors::{AbotError, CacheError};
 use crate::matrix::{Matrix, UserID};
 use log::{debug, error, info, warn};
+use redis::aio::Connection;
+use reqwest::Url;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::mem;
 use std::{convert::TryInto, result::Result, thread, time};
-use reqwest::Url;
-use std::{collections::HashMap};
-use redis::aio::Connection;
 
 #[derive(Clone)]
 pub struct Abot {
@@ -59,7 +59,6 @@ impl Abot {
 
     /// Spawn and restart on error
     pub fn start() {
-
         // Fetch and cache member Ids
         spawn_and_fetch_members_from_remote_url();
 
@@ -80,7 +79,6 @@ fn spawn_and_fetch_members_from_remote_url() {
 // spawns a task to load and process commands from matrix
 fn spawn_and_restart_matrix_lazy_load_on_error() {
     async_std::task::spawn(async {
-
         let config = CONFIG.clone();
         if !config.matrix_disabled {
             loop {
@@ -108,6 +106,7 @@ pub enum Severity {
     High,
     Medium,
     Low,
+    NotDefined,
 }
 
 impl std::fmt::Display for Severity {
@@ -116,6 +115,7 @@ impl std::fmt::Display for Severity {
             Self::High => write!(f, "high"),
             Self::Medium => write!(f, "medium"),
             Self::Low => write!(f, "low"),
+            Self::NotDefined => write!(f, "*"),
         }
     }
 }
@@ -138,16 +138,38 @@ impl From<Severity> for String {
     }
 }
 
+impl From<&str> for Severity {
+    fn from(severity: &str) -> Self {
+        match severity {
+            "high" => Severity::High,
+            "medium" => Severity::Medium,
+            "low" => Severity::Low,
+            _ => Severity::NotDefined,
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, Clone, PartialEq)]
 pub enum ReportType {
-    Alerts(Option<(MemberId, Severity)>),
+    Alerts(Option<(MemberId, Severity, Option<MuteTime>)>),
 }
 
 impl ReportType {
     pub fn name(&self) -> String {
         match &self {
-            Self::Alerts(Some((member_id, severity))) => {
-                format!("Alerts from {} with {} severity", member_id, severity)
+            Self::Alerts(Some((member_id, severity, mute_time_optional))) => {
+                if let Some(mute_time) = mute_time_optional {
+                    format!(
+                        "{} alerts with {} severity (mute interval: {} minutes)",
+                        member_id, severity, mute_time
+                    )
+                } else {
+                    let config = CONFIG.clone();
+                    format!(
+                        "{} alerts with {} severity (mute interval: {} minutes)",
+                        member_id, severity, config.mute_time
+                    )
+                }
             }
             Self::Alerts(None) => "Alerts format not supported".to_string(),
         }
@@ -164,14 +186,15 @@ impl std::fmt::Display for ReportType {
 
 #[derive(Deserialize, Debug)]
 pub struct MembersResponse {
-    members: HashMap<MemberId, serde_json::Value>
+    members: HashMap<MemberId, serde_json::Value>,
 }
 /// Fetch members from ibp-monitor main repo https://raw.githubusercontent.com/ibp-network/config/main/members.json
-pub async fn try_fetch_members_from_remote_url(
-) -> Result<(), AbotError> {
+pub async fn try_fetch_members_from_remote_url() -> Result<(), AbotError> {
     let config = CONFIG.clone();
     if config.members_json_url.len() == 0 {
-        return Err(AbotError::Other("config.members_json_url not specified".to_string()))
+        return Err(AbotError::Other(
+            "config.members_json_url not specified".to_string(),
+        ));
     }
 
     let url = Url::parse(&*config.members_json_url)?;
@@ -184,23 +207,17 @@ pub async fn try_fetch_members_from_remote_url(
                     let mut conn = get_conn(&cache).await?;
                     for (member, _) in data.members {
                         redis::cmd("SADD")
-                                    .arg(CacheKey::Members)
-                                    .arg(member.to_string())
-                                    .query_async::<Connection, bool>(&mut conn)
-                                    .await
-                                    .map_err(CacheError::RedisCMDError)?;
+                            .arg(CacheKey::Members)
+                            .arg(member.to_string())
+                            .query_async::<Connection, bool>(&mut conn)
+                            .await
+                            .map_err(CacheError::RedisCMDError)?;
                     }
-
                 }
-                Err(e) => {
-                    return Err(AbotError::ReqwestError(e))
-                }
+                Err(e) => return Err(AbotError::ReqwestError(e)),
             }
         }
-        Err(e) => {
-            return Err(AbotError::ReqwestError(e))
-        }
+        Err(e) => return Err(AbotError::ReqwestError(e)),
     }
     Ok(())
 }
-

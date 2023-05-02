@@ -23,7 +23,7 @@ use actix_web::{error::ResponseError, HttpResponse};
 use derive_more::Display;
 use reqwest;
 use serde::{Deserialize, Serialize};
-use std::{str::Utf8Error, string::String};
+use std::{num::ParseIntError, str::Utf8Error, string::String};
 use thiserror::Error;
 
 /// On specific error messages
@@ -76,6 +76,8 @@ pub enum MatrixError {
     IOError(#[from] std::io::Error),
     #[error("Cache error: {0}")]
     CacheError(#[from] CacheError),
+    #[error("ParseInt error: {0}")]
+    ParseIntError(#[from] ParseIntError),
     #[error("{0}")]
     Other(String),
 }
