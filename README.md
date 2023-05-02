@@ -5,6 +5,7 @@ Subscribe to Alerts published by ibp-monitor and delivery over matrix
 
 - [&check;] matrix authentication, load and process commands from public and private rooms
 - [&check;] implement http server with shared state (cache and matrix)
+- [&check;] load members from json config file
 - [&check;] review matrix commands:
     - [&check;] !subscribe alerts MEMBER SEVERITY
     - [&check;] !unsubscribe alerts MEMBER SEVERITY

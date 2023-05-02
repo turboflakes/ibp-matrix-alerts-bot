@@ -74,6 +74,8 @@ pub enum MatrixError {
     SerdeError(#[from] serde_json::Error),
     #[error("IOError error: {0}")]
     IOError(#[from] std::io::Error),
+    #[error("Cache error: {0}")]
+    CacheError(#[from] CacheError),
     #[error("{0}")]
     Other(String),
 }

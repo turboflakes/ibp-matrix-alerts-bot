@@ -19,9 +19,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+use crate::abot::{Severity, MemberId};
 use crate::config::{Config, CONFIG};
 use crate::errors::CacheError;
-
 use actix_web::web;
 use log::{error, info};
 use mobc::{Connection, Pool};
@@ -78,4 +78,42 @@ pub fn add_pool(cfg: &mut web::ServiceConfig) {
 
 pub async fn get_conn(pool: &RedisPool) -> Result<RedisConn, CacheError> {
     pool.get().await.map_err(CacheError::RedisPoolError)
+}
+
+// Who represents the user matrix handler who subscribed to a specific alert
+pub type Who = String;
+
+// MuteTime represented in minutes
+pub type MuteTime = u32;
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum CacheKey {
+    Members,                                    // Set
+    Subscribers(MemberId, Severity),              // Set
+    SubscriberConfig(Who, MemberId, Severity),    // Hash
+}
+
+impl std::fmt::Display for CacheKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Members => {
+                write!(f, "abot:members")
+            }
+            Self::Subscribers(member, severity) => {
+                write!(f, "abot:subscribers:{}:{}", member, severity)
+            }
+            Self::SubscriberConfig(who, member, severity) => {
+                write!(f, "abot:subscriber:{}:{}:{}:config", who, member, severity)
+            }
+        }
+    }
+}
+
+impl redis::ToRedisArgs for CacheKey {
+    fn write_redis_args<W>(&self, out: &mut W)
+    where
+        W: ?Sized + redis::RedisWrite,
+    {
+        out.write_arg(self.to_string().as_bytes())
+    }
 }
