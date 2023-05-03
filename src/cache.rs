@@ -20,9 +20,8 @@
 // SOFTWARE.
 
 use crate::abot::{MemberId, Severity, Who};
-use crate::config::{Config, CONFIG};
+use crate::config::Config;
 use crate::errors::CacheError;
-use actix_web::web;
 use log::{error, info};
 use mobc::{Connection, Pool};
 use mobc_redis::RedisConnectionManager;
@@ -70,11 +69,6 @@ pub fn create_or_await_pool(config: Config) -> RedisPool {
     }
 }
 
-pub fn add_pool(cfg: &mut web::ServiceConfig) {
-    let pool = create_pool(CONFIG.clone()).expect("failed to create Redis pool");
-    cfg.app_data(web::Data::new(pool));
-}
-
 pub async fn get_conn(pool: &RedisPool) -> Result<RedisConn, CacheError> {
     pool.get().await.map_err(CacheError::RedisPoolError)
 }
@@ -85,8 +79,8 @@ pub enum CacheKey {
     Subscribers(MemberId, Severity),           // Set
     SubscriberConfig(Who, MemberId, Severity), // Hash
     LastAlerts(Who, MemberId),                 // Hash
-    StatsByCode(MemberId),                           // Hash
-    StatsBySeverity(MemberId),                           // Hash
+    StatsByCode(MemberId),                     // Hash
+    StatsBySeverity(MemberId),                 // Hash
 }
 
 impl std::fmt::Display for CacheKey {

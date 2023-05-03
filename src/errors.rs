@@ -96,6 +96,7 @@ impl From<MatrixError> for AbotError {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Error, Debug, Display, PartialEq)]
 pub enum ApiError {
     #[allow(dead_code)]

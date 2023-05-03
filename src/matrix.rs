@@ -18,6 +18,7 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
+
 #![allow(dead_code)]
 use crate::abot::ReportType;
 use crate::cache::{create_or_await_pool, get_conn, CacheKey, RedisPool};
@@ -541,9 +542,6 @@ impl Matrix {
                             }
                         }
                     }
-                    _ => {
-                        todo!()
-                    }
                 },
                 Commands::Unsubscribe(report, who) => match report {
                     ReportType::Alerts(optional) => {
@@ -580,7 +578,6 @@ impl Matrix {
                             }
                         }
                     }
-                    _ => (),
                 },
                 _ => (),
             }
@@ -865,7 +862,6 @@ impl Matrix {
                                                                     .push(Commands::NotSupported)
                                                             }
                                                         }
-                                                        _ => commands.push(Commands::NotSupported),
                                                     },
                                                 },
                                                 _ => commands.push(Commands::NotSupported),
@@ -1217,7 +1213,7 @@ impl Matrix {
 
 pub async fn add_matrix(cfg: &mut web::ServiceConfig) {
     let mut matrix: Matrix = Matrix::new();
-    matrix.authenticate().await.unwrap_or_else(|e| {
+    matrix.authenticate().await.unwrap_or_else(|_e| {
         // error!("{}", e);
         Default::default()
     });

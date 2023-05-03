@@ -14,4 +14,4 @@ Subscribe to Alerts published by ibp-monitor and delivery over matrix
 - [&check;] implement /alerts webhook
 - [&check;] implement alert stats counters
     - [ ] !stats alerts
-- [ ] define alert message template
+- [&check;] define alert message template

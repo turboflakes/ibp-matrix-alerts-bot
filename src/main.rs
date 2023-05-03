@@ -25,6 +25,7 @@ mod cache;
 mod config;
 mod errors;
 mod matrix;
+mod report;
 
 use crate::abot::Abot;
 use crate::api::routes::routes;

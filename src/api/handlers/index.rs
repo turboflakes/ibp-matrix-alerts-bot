@@ -20,10 +20,8 @@
 // SOFTWARE.
 
 use crate::api::helpers::respond_json;
-use crate::config::CONFIG;
 use crate::errors::ApiError;
-use crate::Abot;
-use actix_web::{web, web::Json};
+use actix_web::web::Json;
 use serde::{Deserialize, Serialize};
 use std::env;
 
@@ -35,17 +33,7 @@ pub struct IndexResponse {
 }
 
 /// Handler to get information about the service
-pub async fn get_index(abot: web::Data<Abot>) -> Result<Json<IndexResponse>, ApiError> {
-    let config = CONFIG.clone();
-
-    if let Err(e) = &abot
-        .matrix()
-        .send_public_message(&"__test_message__", None)
-        .await
-    {
-        return Err(ApiError::InternalServerError(e.to_string()));
-    }
-
+pub async fn get_index() -> Result<Json<IndexResponse>, ApiError> {
     respond_json(IndexResponse {
         pkg_name: env!("CARGO_PKG_NAME").into(),
         pkg_version: env!("CARGO_PKG_VERSION").into(),

@@ -19,15 +19,15 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use crate::abot::{MemberId, Severity, Who};
+use crate::abot::{MemberId, ServiceId, Severity, Who};
 use crate::api::helpers::respond_json;
 use crate::cache::{get_conn, CacheKey};
-use crate::config::CONFIG;
+// use crate::config::CONFIG;
 use crate::errors::{ApiError, CacheError};
+use crate::report::{RawAlert, Report};
 use crate::Abot;
 use actix_web::{web, web::Json};
 use chrono::Utc;
-use log::{error, info};
 use redis::aio::Connection;
 use serde::{Deserialize, Serialize};
 
@@ -43,6 +43,7 @@ pub struct Response {
     pub status: Status,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HealthCheckRecord {
@@ -56,6 +57,7 @@ pub struct HealthCheckRecord {
     performance: f64,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HealthCheck {
@@ -70,6 +72,7 @@ pub struct HealthCheck {
     record: HealthCheckRecord,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Alert {
@@ -77,6 +80,7 @@ pub struct Alert {
     severity: Severity,
     message: String,
     member_id: MemberId,
+    service_id: ServiceId,
     health_checks: Vec<HealthCheck>,
 }
 
@@ -139,10 +143,23 @@ pub async fn post_alert(
         // 4th send alert and update last_alert timestamp
         let now = Utc::now();
         if now.timestamp() > last_time_sent + (mute_time * 60) {
+            let report = Report::from(RawAlert {
+                code: new_alert.code,
+                member_id: new_alert.member_id.to_owned(),
+                service_id: new_alert.service_id.to_owned(),
+                severity: new_alert.severity.clone(),
+                message: new_alert.message.to_owned(),
+            });
+
             let _ = &abot
                 .matrix()
-                .send_public_message(&new_alert.message, Some(&new_alert.message))
+                .send_private_message(
+                    &subscriber,
+                    &report.message(),
+                    Some(&report.formatted_message()),
+                )
                 .await?;
+
             //
             redis::cmd("HSET")
                 .arg(CacheKey::LastAlerts(

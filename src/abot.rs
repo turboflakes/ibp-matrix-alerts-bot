@@ -20,16 +20,15 @@
 // SOFTWARE.
 
 use crate::cache::{create_or_await_pool, get_conn, CacheKey, RedisPool};
-use crate::config::{Config, CONFIG};
+use crate::config::CONFIG;
 use crate::errors::{AbotError, CacheError};
-use crate::matrix::{Matrix, UserID};
-use log::{debug, error, info, warn};
+use crate::matrix::Matrix;
+use log::error;
 use redis::aio::Connection;
 use reqwest::Url;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::collections::HashMap;
-use std::mem;
-use std::{convert::TryInto, result::Result, thread, time};
+use std::{result::Result, thread, time};
 
 #[derive(Clone)]
 pub struct Abot {
@@ -100,6 +99,9 @@ fn spawn_and_restart_matrix_lazy_load_on_error() {
 
 // MemberId represents the member from which we would like to receive alerts from
 pub type MemberId = String;
+
+// ServiceId represents the service from which the alert has been raised
+pub type ServiceId = String;
 
 // Who represents the user matrix handler who subscribed to a specific alert
 pub type Who = String;
