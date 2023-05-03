@@ -19,10 +19,11 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 #![allow(dead_code)]
-use crate::abot::{ReportType};
+use crate::abot::ReportType;
 use crate::cache::{create_or_await_pool, get_conn, CacheKey, RedisPool};
 use crate::config::CONFIG;
 use crate::errors::{CacheError, MatrixError};
+use actix_web::web;
 use async_recursion::async_recursion;
 use base64::encode;
 use log::{debug, info, warn};
@@ -1212,4 +1213,14 @@ impl Matrix {
             None => Err(MatrixError::Other("access_token not defined".to_string())),
         }
     }
+}
+
+pub async fn add_matrix(cfg: &mut web::ServiceConfig) {
+    let mut matrix: Matrix = Matrix::new();
+    matrix.authenticate().await.unwrap_or_else(|e| {
+        // error!("{}", e);
+        Default::default()
+    });
+    // let pool = create_pool(CONFIG.clone()).expect("failed to create Redis pool");
+    cfg.app_data(web::Data::new(matrix));
 }

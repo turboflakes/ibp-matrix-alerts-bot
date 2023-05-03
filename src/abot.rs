@@ -19,7 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use crate::cache::{create_or_await_pool, get_conn, CacheKey, MuteTime, RedisPool};
+use crate::cache::{create_or_await_pool, get_conn, CacheKey, RedisPool};
 use crate::config::{Config, CONFIG};
 use crate::errors::{AbotError, CacheError};
 use crate::matrix::{Matrix, UserID};
@@ -98,7 +98,11 @@ fn spawn_and_restart_matrix_lazy_load_on_error() {
     });
 }
 
+// MemberId represents the member from which we would like to receive alerts from
 pub type MemberId = String;
+
+// Who represents the user matrix handler who subscribed to a specific alert
+pub type Who = String;
 
 #[derive(Debug, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "lowercase")]
@@ -108,6 +112,9 @@ pub enum Severity {
     Low,
     NotDefined,
 }
+
+// MuteTime represented in minutes
+pub type MuteTime = u32;
 
 impl std::fmt::Display for Severity {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

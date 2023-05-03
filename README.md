@@ -11,5 +11,7 @@ Subscribe to Alerts published by ibp-monitor and delivery over matrix
     - [&check;] !unsubscribe alerts MEMBER SEVERITY
     - [&check;] !help
 - [&check;] allow configuration of mute time interval
-- [ ] implement /alerts webhook
+- [&check;] implement /alerts webhook
+- [ ] implement alert stats counters
+    - [ ] !stats alerts
 - [ ] define alert message template

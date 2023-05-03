@@ -180,3 +180,17 @@ impl From<CacheError> for String {
         format!("{}", error).to_string()
     }
 }
+
+/// Convert CacheError to ApiErrors
+impl From<CacheError> for ApiError {
+    fn from(error: CacheError) -> Self {
+        ApiError::InternalServerError(error.into())
+    }
+}
+
+/// Convert MatrixError to ApiErrors
+impl From<MatrixError> for ApiError {
+    fn from(error: MatrixError) -> Self {
+        ApiError::InternalServerError(error.into())
+    }
+}

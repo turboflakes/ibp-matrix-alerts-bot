@@ -19,14 +19,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use crate::abot::{MemberId, Severity};
+use crate::abot::{MemberId, Severity, Who};
 use crate::config::{Config, CONFIG};
 use crate::errors::CacheError;
 use actix_web::web;
 use log::{error, info};
 use mobc::{Connection, Pool};
 use mobc_redis::RedisConnectionManager;
-use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use std::{thread, time};
 
@@ -80,17 +79,12 @@ pub async fn get_conn(pool: &RedisPool) -> Result<RedisConn, CacheError> {
     pool.get().await.map_err(CacheError::RedisPoolError)
 }
 
-// Who represents the user matrix handler who subscribed to a specific alert
-pub type Who = String;
-
-// MuteTime represented in minutes
-pub type MuteTime = u32;
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum CacheKey {
     Members,                                   // Set
     Subscribers(MemberId, Severity),           // Set
     SubscriberConfig(Who, MemberId, Severity), // Hash
+    LastAlerts(Who, MemberId),                 // Hash
 }
 
 impl std::fmt::Display for CacheKey {
@@ -104,6 +98,9 @@ impl std::fmt::Display for CacheKey {
             }
             Self::SubscriberConfig(who, member, severity) => {
                 write!(f, "abot:subscriber:{}:{}:{}:config", who, member, severity)
+            }
+            Self::LastAlerts(who, member) => {
+                write!(f, "abot:alerts:{}:{}", who, member)
             }
         }
     }
