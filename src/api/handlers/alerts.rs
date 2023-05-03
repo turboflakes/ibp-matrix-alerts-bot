@@ -34,7 +34,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Status {
-    Processed,
+    Delivered,
     Skipped,
 }
 
@@ -173,7 +173,7 @@ pub async fn post_alert(
                 .map_err(CacheError::RedisCMDError)?;
 
             return respond_json(Response {
-                status: Status::Processed,
+                status: Status::Delivered,
             });
         }
     }
