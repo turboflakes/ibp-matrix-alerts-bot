@@ -23,7 +23,7 @@ use actix_web::{error::ResponseError, HttpResponse};
 use derive_more::Display;
 use reqwest;
 use serde::{Deserialize, Serialize};
-use std::{str::Utf8Error, string::String};
+use std::{num::ParseIntError, str::Utf8Error, string::String};
 use thiserror::Error;
 
 /// On specific error messages
@@ -74,6 +74,10 @@ pub enum MatrixError {
     SerdeError(#[from] serde_json::Error),
     #[error("IOError error: {0}")]
     IOError(#[from] std::io::Error),
+    #[error("Cache error: {0}")]
+    CacheError(#[from] CacheError),
+    #[error("ParseInt error: {0}")]
+    ParseIntError(#[from] ParseIntError),
     #[error("{0}")]
     Other(String),
 }
@@ -92,6 +96,7 @@ impl From<MatrixError> for AbotError {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Error, Debug, Display, PartialEq)]
 pub enum ApiError {
     #[allow(dead_code)]
@@ -174,5 +179,19 @@ pub enum CacheError {
 impl From<CacheError> for String {
     fn from(error: CacheError) -> Self {
         format!("{}", error).to_string()
+    }
+}
+
+/// Convert CacheError to ApiErrors
+impl From<CacheError> for ApiError {
+    fn from(error: CacheError) -> Self {
+        ApiError::InternalServerError(error.into())
+    }
+}
+
+/// Convert MatrixError to ApiErrors
+impl From<MatrixError> for ApiError {
+    fn from(error: MatrixError) -> Self {
+        ApiError::InternalServerError(error.into())
     }
 }

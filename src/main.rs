@@ -25,10 +25,10 @@ mod cache;
 mod config;
 mod errors;
 mod matrix;
+mod report;
 
 use crate::abot::Abot;
 use crate::api::routes::routes;
-use crate::cache::add_pool;
 use crate::config::CONFIG;
 use log::info;
 use std::env;
@@ -82,7 +82,6 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(abot.clone()))
             .wrap(middleware::Logger::default())
             .wrap(cors)
-            .configure(add_pool)
             .configure(routes)
     })
     .bind(addr)?

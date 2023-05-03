@@ -19,6 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+use crate::api::handlers::alerts::post_alert;
 use crate::api::handlers::index::get_index;
 use actix_web::web;
 
@@ -31,6 +32,8 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(
             web::scope("/api/v1")
                 // API info
-                .route("", web::get().to(get_index)),
+                .route("", web::get().to(get_index))
+                // Alerts route
+                .route("/alerts", web::post().to(post_alert)),
         );
 }

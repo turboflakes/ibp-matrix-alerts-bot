@@ -19,14 +19,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use crate::config::{Config, CONFIG};
+use crate::abot::{MemberId, Severity, Who};
+use crate::config::Config;
 use crate::errors::CacheError;
-
-use actix_web::web;
 use log::{error, info};
 use mobc::{Connection, Pool};
 use mobc_redis::RedisConnectionManager;
-use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use std::{thread, time};
 
@@ -71,11 +69,50 @@ pub fn create_or_await_pool(config: Config) -> RedisPool {
     }
 }
 
-pub fn add_pool(cfg: &mut web::ServiceConfig) {
-    let pool = create_pool(CONFIG.clone()).expect("failed to create Redis pool");
-    cfg.app_data(web::Data::new(pool));
-}
-
 pub async fn get_conn(pool: &RedisPool) -> Result<RedisConn, CacheError> {
     pool.get().await.map_err(CacheError::RedisPoolError)
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum CacheKey {
+    Members,                                   // Set
+    Subscribers(MemberId, Severity),           // Set
+    SubscriberConfig(Who, MemberId, Severity), // Hash
+    LastAlerts(Who, MemberId),                 // Hash
+    StatsByCode(MemberId),                     // Hash
+    StatsBySeverity(MemberId),                 // Hash
+}
+
+impl std::fmt::Display for CacheKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Members => {
+                write!(f, "abot:members")
+            }
+            Self::Subscribers(member, severity) => {
+                write!(f, "abot:subscribers:{}:{}", member, severity)
+            }
+            Self::SubscriberConfig(who, member, severity) => {
+                write!(f, "abot:subscriber:{}:{}:{}:config", who, member, severity)
+            }
+            Self::LastAlerts(who, member) => {
+                write!(f, "abot:alerts:{}:{}", who, member)
+            }
+            Self::StatsByCode(member) => {
+                write!(f, "abot:stats:{}:code", member)
+            }
+            Self::StatsBySeverity(member) => {
+                write!(f, "abot:stats:{}:severity", member)
+            }
+        }
+    }
+}
+
+impl redis::ToRedisArgs for CacheKey {
+    fn write_redis_args<W>(&self, out: &mut W)
+    where
+        W: ?Sized + redis::RedisWrite,
+    {
+        out.write_arg(self.to_string().as_bytes())
+    }
 }

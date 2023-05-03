@@ -42,12 +42,12 @@ lazy_static! {
     pub static ref CONFIG: Config = get_config();
 }
 
-/// provides default value for interval if ABOT_INTERVAL env var is not set
-fn default_interval() -> u64 {
-    21600
+/// provides default value (minutes) for mute_time if ABOT_MUTE_TIME env var is not set
+fn default_mute_time() -> u32 {
+    5
 }
 
-/// provides default value for error interval if ABOT_ERROR_INTERVAL env var is not set
+/// provides default value (minutes) for error interval if ABOT_ERROR_INTERVAL env var is not set
 fn default_error_interval() -> u64 {
     30
 }
@@ -55,16 +55,6 @@ fn default_error_interval() -> u64 {
 /// provides default value for data_path if ABOT_DATA_PATH env var is not set
 fn default_data_path() -> String {
     "./".into()
-}
-
-/// provides default value for maximum_subscribers if ONET_MAXIMUM_SUBSCRIBERS env var is not set
-fn default_maximum_subscribers() -> u32 {
-    1000
-}
-
-/// provides default value for error interval if ABOT_IBP_MONITOR_QUEUE_NAME env var is not set
-fn default_ibp_monitor_queue_name() -> String {
-    "alerts".into()
 }
 
 /// provides default value for api_host if ONET_API_HOST env var is not set
@@ -95,19 +85,16 @@ fn default_redis_database() -> u8 {
 #[derive(Clone, Deserialize, Debug)]
 pub struct Config {
     // general configuration
-    #[serde(default = "default_interval")]
-    pub interval: u64,
+    #[serde(default)]
+    pub members_json_url: String,
+    #[serde(default = "default_mute_time")]
+    pub mute_time: u32,
     #[serde(default = "default_error_interval")]
     pub error_interval: u64,
     #[serde(default)]
     pub is_debug: bool,
     #[serde(default = "default_data_path")]
     pub data_path: String,
-    #[serde(default = "default_maximum_subscribers")]
-    pub maximum_subscribers: u32,
-    // queue configuration
-    #[serde(default = "default_ibp_monitor_queue_name")]
-    pub ibp_monitor_queue_name: String,
     // matrix configuration
     #[serde(default)]
     pub matrix_public_room: String,
@@ -144,11 +131,6 @@ fn get_config() -> Config {
     .version(env!("CARGO_PKG_VERSION"))
     .author(env!("CARGO_PKG_AUTHORS"))
     .about(env!("CARGO_PKG_DESCRIPTION"))
-    .arg(
-      Arg::with_name("ibp-monitor-queue-name")
-        .long("ibp-monitor-queue-name")
-        .takes_value(true)
-        .help("IBP Monitor alerts queue name. The queue from where 'ABOT' will subscribe/listening for alerts waiting to be processed."))
     .arg(
       Arg::with_name("matrix-bot-user")
         .long("matrix-bot-user")
@@ -209,8 +191,8 @@ fn get_config() -> Config {
         }
     }
 
-    if matches.is_present("ibp-monitor-queue-name") {
-        env::set_var("ABOT_IBP_MONITOR_QUEUE_NAME", "true");
+    if let Some(members_json_url) = matches.value_of("members-json-url") {
+        env::set_var("ABOT_MEMBERS_JSON_URL", members_json_url);
     }
 
     if matches.is_present("debug") {
@@ -219,10 +201,6 @@ fn get_config() -> Config {
 
     if let Some(data_path) = matches.value_of("data-path") {
         env::set_var("ABOT_DATA_PATH", data_path);
-    }
-
-    if let Some(maximum_subscribers) = matches.value_of("maximum-subscribers") {
-        env::set_var("ABOT_MAXIMUM_SUBSCRIBERS", maximum_subscribers);
     }
 
     if matches.is_present("disable-matrix") {
@@ -254,12 +232,12 @@ mod tests {
     #[test]
     fn it_gets_a_config() {
         let config = get_config();
-        assert_ne!(config.ibp_monitor_queue_name, "".to_string());
+        assert_ne!(config.data_path, "".to_string());
     }
 
     #[test]
     fn it_gets_a_config_from_the_lazy_static() {
         let config = &CONFIG;
-        assert_ne!(config.ibp_monitor_queue_name, "".to_string());
+        assert_ne!(config.data_path, "".to_string());
     }
 }
