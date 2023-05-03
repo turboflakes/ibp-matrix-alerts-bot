@@ -1,6 +1,6 @@
 [package]
 name = "abot"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Paulo <paulo@turboflakes.io>"]
 description = "Subscribe to Alerts published by ibp-monitor and delivery over matrix" 
 edition = "2018"
