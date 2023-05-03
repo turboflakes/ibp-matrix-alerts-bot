@@ -12,6 +12,6 @@ Subscribe to Alerts published by ibp-monitor and delivery over matrix
     - [&check;] !help
 - [&check;] allow configuration of mute time interval
 - [&check;] implement /alerts webhook
-- [ ] implement alert stats counters
+- [&check;] implement alert stats counters
     - [ ] !stats alerts
 - [ ] define alert message template

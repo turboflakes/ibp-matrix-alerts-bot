@@ -28,9 +28,7 @@ mod matrix;
 
 use crate::abot::Abot;
 use crate::api::routes::routes;
-use crate::cache::add_pool;
 use crate::config::CONFIG;
-use crate::matrix::add_matrix;
 use log::info;
 use std::env;
 

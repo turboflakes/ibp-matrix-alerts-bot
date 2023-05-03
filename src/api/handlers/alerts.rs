@@ -151,7 +151,7 @@ pub async fn post_alert(
                 ))
                 .arg(new_alert.code.to_string())
                 .arg(now.timestamp().to_string())
-                .query_async::<Connection, i64>(&mut conn)
+                .query_async::<Connection, _>(&mut conn)
                 .await
                 .map_err(CacheError::RedisCMDError)?;
 
@@ -160,6 +160,24 @@ pub async fn post_alert(
             });
         }
     }
+
+    // 5th increment alert code counter
+    redis::cmd("HINCRBY")
+        .arg(CacheKey::StatsByCode(new_alert.member_id.to_string()))
+        .arg(new_alert.code.to_string())
+        .arg(1)
+        .query_async::<Connection, _>(&mut conn)
+        .await
+        .map_err(CacheError::RedisCMDError)?;
+
+    // 6th increment alert severity counter
+    redis::cmd("HINCRBY")
+        .arg(CacheKey::StatsBySeverity(new_alert.member_id.to_string()))
+        .arg(new_alert.severity.to_string())
+        .arg(1)
+        .query_async::<Connection, _>(&mut conn)
+        .await
+        .map_err(CacheError::RedisCMDError)?;
 
     respond_json(Response {
         status: Status::Skipped,
