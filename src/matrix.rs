@@ -27,8 +27,10 @@ use crate::errors::{CacheError, MatrixError};
 use actix_web::web;
 use async_recursion::async_recursion;
 use base64::encode;
+use lazy_static::lazy_static;
 use log::{debug, info, warn};
 use redis::aio::Connection;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, collections::HashSet};
 use std::{fs, fs::File, result::Result, thread, time};
@@ -487,8 +489,8 @@ impl Matrix {
             match cmd {
                 Commands::Help => self.reply_help(&room_id).await?,
                 Commands::Subscribe(report, who) => match report {
-                    ReportType::Alerts(optional) => {
-                        if let Some((member, severity, mute_time_optional)) = optional {
+                    ReportType::Alerts(optional, mute_time_optional) => {
+                        if let Some((member, severity)) = optional {
                             let mut conn = get_conn(&self.cache).await?;
 
                             // cache mute time defined by user otherwise set default
@@ -544,8 +546,8 @@ impl Matrix {
                     }
                 },
                 Commands::Unsubscribe(report, who) => match report {
-                    ReportType::Alerts(optional) => {
-                        if let Some((member, severity, _)) = optional {
+                    ReportType::Alerts(optional, _) => {
+                        if let Some((member, severity)) = optional {
                             let mut conn = get_conn(&self.cache).await?;
 
                             let is_member = redis::cmd("SISMEMBER")
@@ -834,27 +836,32 @@ impl Matrix {
                                             None => commands.push(Commands::NotSupported),
                                             Some((report_type, params)) => match report_type {
                                                 "alerts" => match params.split_once(' ') {
-                                                    None => commands.push(Commands::NotSupported),
-                                                    Some((member, severity)) => match severity
+                                                    None => commands.push(Commands::NotSupported), // TODO !subscribe alerts
+                                                    Some((member, severity)) => match severity // TODO !subscribe alerts [mute_time]
                                                         .split_once(' ')
                                                     {
                                                         None => commands.push(Commands::Subscribe(
-                                                            ReportType::Alerts(Some((
-                                                                member.to_string(),
-                                                                severity.into(),
+                                                            ReportType::Alerts(
+                                                                Some((
+                                                                    member.to_string(),
+                                                                    severity.into(),
+                                                                )),
                                                                 None,
-                                                            ))),
+                                                            ),
                                                             message.sender.to_string(),
                                                         )),
-                                                        Some((severity, mute_time)) => {
-                                                            if let Ok(mt) = mute_time.trim().parse()
+                                                        Some((severity, extras)) => {
+                                                            if let Some(mt) =
+                                                                extract_mute_time(extras)
                                                             {
                                                                 commands.push(Commands::Subscribe(
-                                                                    ReportType::Alerts(Some((
-                                                                        member.to_string(),
-                                                                        severity.into(),
+                                                                    ReportType::Alerts(
+                                                                        Some((
+                                                                            member.to_string(),
+                                                                            severity.into(),
+                                                                        )),
                                                                         Some(mt),
-                                                                    ))),
+                                                                    ),
                                                                     message.sender.to_string(),
                                                                 ))
                                                             } else {
@@ -871,14 +878,16 @@ impl Matrix {
                                             None => commands.push(Commands::NotSupported),
                                             Some((report_type, params)) => match report_type {
                                                 "alerts" => match params.split_once(' ') {
-                                                    None => commands.push(Commands::NotSupported),
+                                                    None => commands.push(Commands::NotSupported), // TODO !unsubscribe alerts from all members
                                                     Some((member, severity)) => {
                                                         commands.push(Commands::Unsubscribe(
-                                                            ReportType::Alerts(Some((
-                                                                member.to_string(),
-                                                                severity.into(),
+                                                            ReportType::Alerts(
+                                                                Some((
+                                                                    member.to_string(),
+                                                                    severity.into(),
+                                                                )),
                                                                 None,
-                                                            ))),
+                                                            ),
                                                             message.sender.to_string(),
                                                         ))
                                                     }
@@ -1219,4 +1228,23 @@ pub async fn add_matrix(cfg: &mut web::ServiceConfig) {
     });
     // let pool = create_pool(CONFIG.clone()).expect("failed to create Redis pool");
     cfg.app_data(web::Data::new(matrix));
+}
+
+fn extract_mute_time(input: &str) -> Option<u32> {
+    if let Ok(n) = input.trim_start_matches("[").trim_end_matches("]").parse() {
+        return Some(n);
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extract_mute_time_from_str() {
+        assert_eq!(extract_mute_time("[123]"), Some(123));
+        assert_eq!(extract_mute_time("123]"), Some(123));
+        assert_eq!(extract_mute_time("12e3]"), None);
+    }
 }

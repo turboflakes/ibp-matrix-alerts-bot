@@ -112,7 +112,6 @@ pub enum Severity {
     High,
     Medium,
     Low,
-    NotDefined,
 }
 
 // MuteTime represented in minutes
@@ -124,7 +123,6 @@ impl std::fmt::Display for Severity {
             Self::High => write!(f, "high"),
             Self::Medium => write!(f, "medium"),
             Self::Low => write!(f, "low"),
-            Self::NotDefined => write!(f, "*"),
         }
     }
 }
@@ -153,20 +151,20 @@ impl From<&str> for Severity {
             "high" => Severity::High,
             "medium" => Severity::Medium,
             "low" => Severity::Low,
-            _ => Severity::NotDefined,
+            _ => Severity::Low,
         }
     }
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq)]
 pub enum ReportType {
-    Alerts(Option<(MemberId, Severity, Option<MuteTime>)>),
+    Alerts(Option<(MemberId, Severity)>, Option<MuteTime>),
 }
 
 impl ReportType {
     pub fn name(&self) -> String {
         match &self {
-            Self::Alerts(Some((member_id, severity, mute_time_optional))) => {
+            Self::Alerts(Some((member_id, severity)), mute_time_optional) => {
                 if let Some(mute_time) = mute_time_optional {
                     format!(
                         "{} alerts with {} severity (mute interval: {} minutes)",
@@ -180,7 +178,20 @@ impl ReportType {
                     )
                 }
             }
-            Self::Alerts(None) => "Alerts format not supported".to_string(),
+            Self::Alerts(None, mute_time_optional) => {
+                if let Some(mute_time) = mute_time_optional {
+                    format!(
+                        "alerts from all members (mute interval: {} minutes)",
+                        mute_time
+                    )
+                } else {
+                    let config = CONFIG.clone();
+                    format!(
+                        "alerts from all members (mute interval: {} minutes)",
+                        config.mute_time
+                    )
+                }
+            }
         }
     }
 }
@@ -188,7 +199,7 @@ impl ReportType {
 impl std::fmt::Display for ReportType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Alerts(_option) => write!(f, "Alerts"),
+            Self::Alerts(_option_1, _option_2) => write!(f, "Alerts"),
         }
     }
 }
