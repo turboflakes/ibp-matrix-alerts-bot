@@ -112,7 +112,6 @@ pub enum Severity {
     High,
     Medium,
     Low,
-    NotDefined,
 }
 
 // MuteTime represented in minutes
@@ -124,7 +123,6 @@ impl std::fmt::Display for Severity {
             Self::High => write!(f, "high"),
             Self::Medium => write!(f, "medium"),
             Self::Low => write!(f, "low"),
-            Self::NotDefined => write!(f, "*"),
         }
     }
 }
@@ -153,34 +151,50 @@ impl From<&str> for Severity {
             "high" => Severity::High,
             "medium" => Severity::Medium,
             "low" => Severity::Low,
-            _ => Severity::NotDefined,
+            _ => Severity::Low,
         }
     }
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq)]
 pub enum ReportType {
-    Alerts(Option<(MemberId, Severity, Option<MuteTime>)>),
+    Alerts(Option<MemberId>, Option<Severity>, Option<MuteTime>),
 }
 
 impl ReportType {
     pub fn name(&self) -> String {
         match &self {
-            Self::Alerts(Some((member_id, severity, mute_time_optional))) => {
+            Self::Alerts(Some(member_id), Some(severity), mute_time_optional) => {
                 if let Some(mute_time) = mute_time_optional {
                     format!(
-                        "{} alerts with {} severity (mute interval: {} minutes)",
+                        "Alerts from {} with {} severity (mute interval: {} minutes)",
                         member_id, severity, mute_time
                     )
                 } else {
-                    let config = CONFIG.clone();
-                    format!(
-                        "{} alerts with {} severity (mute interval: {} minutes)",
-                        member_id, severity, config.mute_time
-                    )
+                    format!("Alerts from {} with {} severity", member_id, severity)
                 }
             }
-            Self::Alerts(None) => "Alerts format not supported".to_string(),
+            Self::Alerts(Some(member_id), None, mute_time_optional) => {
+                if let Some(mute_time) = mute_time_optional {
+                    format!(
+                        "All Alerts from {} (mute interval: {} minutes)",
+                        member_id, mute_time
+                    )
+                } else {
+                    format!("All Alerts from {}", member_id)
+                }
+            }
+            Self::Alerts(None, None, mute_time_optional) => {
+                if let Some(mute_time) = mute_time_optional {
+                    format!(
+                        "All Alerts from all members (mute interval: {} minutes)",
+                        mute_time
+                    )
+                } else {
+                    format!("All Alerts from all members")
+                }
+            }
+            _ => unimplemented!(),
         }
     }
 }
@@ -188,7 +202,7 @@ impl ReportType {
 impl std::fmt::Display for ReportType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Alerts(_option) => write!(f, "Alerts"),
+            Self::Alerts(_option_1, _option_2, _option_3) => write!(f, "Alerts"),
         }
     }
 }

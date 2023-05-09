@@ -97,6 +97,5 @@ fn severity_emoji(severity: Severity) -> String {
         Severity::High => String::from("🔥🔥🔥"),
         Severity::Medium => String::from("🔥🔥"),
         Severity::Low => String::from("🔥"),
-        _ => String::from(""),
     }
 }

@@ -20,7 +20,7 @@
 // SOFTWARE.
 
 #![allow(dead_code)]
-use crate::abot::ReportType;
+use crate::abot::{MemberId, MuteTime, ReportType, Severity};
 use crate::cache::{create_or_await_pool, get_conn, CacheKey, RedisPool};
 use crate::config::CONFIG;
 use crate::errors::{CacheError, MatrixError};
@@ -50,7 +50,9 @@ pub type UserID = String;
 enum Commands {
     Help,
     Subscribe(ReportType, UserID),
+    SubscribeAll(ReportType, UserID),
     Unsubscribe(ReportType, UserID),
+    UnsubscribeAll(ReportType, UserID),
     NotSupported,
 }
 
@@ -477,6 +479,59 @@ impl Matrix {
         Ok(())
     }
 
+    async fn subscribe_alerts(
+        &self,
+        who: &str,
+        member_id: &str,
+        severity: Severity,
+        mute_time: MuteTime,
+    ) -> Result<(), MatrixError> {
+        let mut conn = get_conn(&self.cache).await?;
+        let mut data: BTreeMap<String, String> = BTreeMap::new();
+        data.insert(String::from("mute"), mute_time.to_string());
+
+        redis::cmd("HSET")
+            .arg(CacheKey::SubscriberConfig(
+                who.to_string(),
+                member_id.to_string(),
+                severity.clone(),
+            ))
+            .arg(data)
+            .query_async::<Connection, bool>(&mut conn)
+            .await
+            .map_err(CacheError::RedisCMDError)?;
+
+        redis::cmd("SADD")
+            .arg(CacheKey::Subscribers(
+                member_id.to_string(),
+                severity.clone(),
+            ))
+            .arg(who.to_string())
+            .query_async::<Connection, bool>(&mut conn)
+            .await
+            .map_err(CacheError::RedisCMDError)?;
+
+        Ok(())
+    }
+
+    async fn unsubscribe_alerts(
+        &self,
+        who: &str,
+        member_id: &str,
+        severity: Severity,
+    ) -> Result<(), MatrixError> {
+        let mut conn = get_conn(&self.cache).await?;
+
+        redis::cmd("SREM")
+            .arg(CacheKey::Subscribers(member_id.to_string(), severity))
+            .arg(who.to_string())
+            .query_async::<Connection, bool>(&mut conn)
+            .await
+            .map_err(CacheError::RedisCMDError)?;
+
+        Ok(())
+    }
+
     async fn process_commands_into_room(
         &self,
         commands: Vec<Commands>,
@@ -487,10 +542,8 @@ impl Matrix {
             match cmd {
                 Commands::Help => self.reply_help(&room_id).await?,
                 Commands::Subscribe(report, who) => match report {
-                    ReportType::Alerts(optional) => {
-                        if let Some((member, severity, mute_time_optional)) = optional {
-                            let mut conn = get_conn(&self.cache).await?;
-
+                    ReportType::Alerts(member_optional, severity_optional, mute_time_optional) => {
+                        if let Some(member) = member_optional {
                             // cache mute time defined by user otherwise set default
                             let mute_time = if let Some(mt) = mute_time_optional {
                                 mt.clone()
@@ -498,65 +551,81 @@ impl Matrix {
                                 config.mute_time
                             };
 
-                            let mut data: BTreeMap<String, String> = BTreeMap::new();
-                            data.insert(String::from("mute"), mute_time.to_string());
-
-                            redis::cmd("HSET")
-                                .arg(CacheKey::SubscriberConfig(
-                                    who.to_string(),
-                                    member.to_string(),
-                                    severity.clone(),
-                                ))
-                                .arg(data)
-                                .query_async::<Connection, bool>(&mut conn)
-                                .await
-                                .map_err(CacheError::RedisCMDError)?;
-
+                            // first validate if it's a valid member
+                            let mut conn = get_conn(&self.cache).await?;
                             let is_member = redis::cmd("SISMEMBER")
-                                .arg(CacheKey::Subscribers(member.to_string(), severity.clone()))
-                                .arg(who.to_string())
+                                .arg(CacheKey::Members)
+                                .arg(member.to_string())
                                 .query_async::<Connection, bool>(&mut conn)
                                 .await
                                 .map_err(CacheError::RedisCMDError)?;
 
                             if is_member {
-                                let message =
-                                    format!("📥 Subscription updated - <i>{}</i>", report.name());
+                                if let Some(severity) = severity_optional {
+                                    self.subscribe_alerts(who, member, severity.clone(), mute_time)
+                                        .await?;
+                                } else {
+                                    self.subscribe_alerts(who, member, Severity::High, mute_time)
+                                        .await?;
+                                    self.subscribe_alerts(who, member, Severity::Medium, mute_time)
+                                        .await?;
+                                    self.subscribe_alerts(who, member, Severity::Low, mute_time)
+                                        .await?;
+                                }
+
+                                let message = format!("📥 Subscription -> {} ", report.name());
                                 self.send_private_message(who, &message, Some(&message))
                                     .await?;
                             } else {
-                                redis::cmd("SADD")
-                                    .arg(CacheKey::Subscribers(
-                                        member.to_string(),
-                                        severity.clone(),
-                                    ))
-                                    .arg(who.to_string())
-                                    .query_async::<Connection, bool>(&mut conn)
-                                    .await
-                                    .map_err(CacheError::RedisCMDError)?;
-
-                                let message =
-                                    format!("📥 subscription created - <i>{}</i>", report.name());
+                                let message = format!(
+                                    "❓ No Member with ID <b>{}</b> defined",
+                                    member.to_string()
+                                );
                                 self.send_private_message(who, &message, Some(&message))
                                     .await?;
                             }
                         }
                     }
                 },
+                Commands::SubscribeAll(report, who) => match report {
+                    ReportType::Alerts(_, _, mute_time_optional) => {
+                        let mut conn = get_conn(&self.cache).await?;
+
+                        // cache mute time defined by user otherwise set default
+                        let mute_time = if let Some(mt) = mute_time_optional {
+                            mt.clone()
+                        } else {
+                            config.mute_time
+                        };
+
+                        // get all defined members
+                        let member_ids = redis::cmd("SMEMBERS")
+                            .arg(CacheKey::Members)
+                            .query_async::<Connection, Vec<MemberId>>(&mut conn)
+                            .await
+                            .map_err(CacheError::RedisCMDError)?;
+
+                        // subscribe every member for all type of severities
+                        for member_id in member_ids {
+                            self.subscribe_alerts(who, &member_id, Severity::High, mute_time)
+                                .await?;
+                            self.subscribe_alerts(who, &member_id, Severity::Medium, mute_time)
+                                .await?;
+                            self.subscribe_alerts(who, &member_id, Severity::Low, mute_time)
+                                .await?;
+                        }
+                        let message = format!("📥 Subscription -> {}", report.name());
+                        self.send_private_message(who, &message, Some(&message))
+                            .await?;
+                    }
+                },
                 Commands::Unsubscribe(report, who) => match report {
-                    ReportType::Alerts(optional) => {
-                        if let Some((member, severity, _)) = optional {
-                            let mut conn = get_conn(&self.cache).await?;
+                    ReportType::Alerts(member_optional, severity_optional, _) => {
+                        if let Some(member) = member_optional {
+                            if let Some(severity) = severity_optional {
+                                let mut conn = get_conn(&self.cache).await?;
 
-                            let is_member = redis::cmd("SISMEMBER")
-                                .arg(CacheKey::Subscribers(member.to_string(), severity.clone()))
-                                .arg(who.to_string())
-                                .query_async::<Connection, bool>(&mut conn)
-                                .await
-                                .map_err(CacheError::RedisCMDError)?;
-
-                            if is_member {
-                                redis::cmd("SREM")
+                                let is_member = redis::cmd("SISMEMBER")
                                     .arg(CacheKey::Subscribers(
                                         member.to_string(),
                                         severity.clone(),
@@ -566,17 +635,59 @@ impl Matrix {
                                     .await
                                     .map_err(CacheError::RedisCMDError)?;
 
+                                if is_member {
+                                    self.unsubscribe_alerts(who, member, severity.clone())
+                                        .await?;
+
+                                    let message = format!(
+                                        "🗑️ Subscription removed - <i>{}</i>",
+                                        report.name()
+                                    );
+                                    self.send_private_message(who, &message, Some(&message))
+                                        .await?;
+                                } else {
+                                    let message =
+                                        format!("❌ No Subscription - <i>{}</i>", report.name());
+                                    self.send_private_message(who, &message, Some(&message))
+                                        .await?;
+                                }
+                            } else {
+                                self.unsubscribe_alerts(who, member, Severity::High).await?;
+                                self.unsubscribe_alerts(who, member, Severity::Medium)
+                                    .await?;
+                                self.unsubscribe_alerts(who, member, Severity::Low).await?;
+
                                 let message =
                                     format!("🗑️ Subscription removed - <i>{}</i>", report.name());
                                 self.send_private_message(who, &message, Some(&message))
                                     .await?;
-                            } else {
-                                let message =
-                                    format!("❌ No Subscription - <i>{}</i>", report.name());
-                                self.send_private_message(who, &message, Some(&message))
-                                    .await?;
                             }
                         }
+                    }
+                },
+                Commands::UnsubscribeAll(report, who) => match report {
+                    ReportType::Alerts(_, _, _) => {
+                        let mut conn = get_conn(&self.cache).await?;
+
+                        // get all defined members
+                        let member_ids = redis::cmd("SMEMBERS")
+                            .arg(CacheKey::Members)
+                            .query_async::<Connection, Vec<MemberId>>(&mut conn)
+                            .await
+                            .map_err(CacheError::RedisCMDError)?;
+
+                        // subscribe every member for all type of severities
+                        for member_id in member_ids {
+                            self.unsubscribe_alerts(who, &member_id, Severity::High)
+                                .await?;
+                            self.unsubscribe_alerts(who, &member_id, Severity::Medium)
+                                .await?;
+                            self.unsubscribe_alerts(who, &member_id, Severity::Low)
+                                .await?;
+                        }
+                        let message = format!("🗑️ Subscription removed - <i>{}</i>", report.name());
+                        self.send_private_message(who, &message, Some(&message))
+                            .await?;
                     }
                 },
                 _ => (),
@@ -829,62 +940,171 @@ impl Matrix {
                                             commands.push(Commands::Help);
                                         }
                                     }
-                                    Some((cmd, value)) => match cmd {
-                                        "!subscribe" => match value.split_once(' ') {
-                                            None => commands.push(Commands::NotSupported),
-                                            Some((report_type, params)) => match report_type {
-                                                "alerts" => match params.split_once(' ') {
-                                                    None => commands.push(Commands::NotSupported),
-                                                    Some((member, severity)) => match severity
-                                                        .split_once(' ')
-                                                    {
-                                                        None => commands.push(Commands::Subscribe(
-                                                            ReportType::Alerts(Some((
-                                                                member.to_string(),
-                                                                severity.into(),
-                                                                None,
-                                                            ))),
-                                                            message.sender.to_string(),
-                                                        )),
-                                                        Some((severity, mute_time)) => {
-                                                            if let Ok(mt) = mute_time.trim().parse()
-                                                            {
-                                                                commands.push(Commands::Subscribe(
-                                                                    ReportType::Alerts(Some((
-                                                                        member.to_string(),
-                                                                        severity.into(),
-                                                                        Some(mt),
-                                                                    ))),
+                                    Some((cmd, other_params)) => match cmd {
+                                        "!subscribe" => match other_params.split_once(' ') {
+                                            None => match other_params {
+                                                "alerts" => {
+                                                    // !subscribe alerts
+                                                    commands.push(Commands::SubscribeAll(
+                                                        ReportType::Alerts(None, None, None),
+                                                        message.sender.to_string(),
+                                                    ))
+                                                }
+                                                _ => commands.push(Commands::NotSupported),
+                                            },
+                                            Some((report_type, other_params)) => {
+                                                match report_type {
+                                                    "alerts" => {
+                                                        match extract_mute_time(other_params) {
+                                                            Some(mute_time) => {
+                                                                // !subscribe alerts [10]
+                                                                commands.push(
+                                                                    Commands::SubscribeAll(
+                                                                        ReportType::Alerts(
+                                                                            None,
+                                                                            None,
+                                                                            Some(mute_time),
+                                                                        ),
+                                                                        message.sender.to_string(),
+                                                                    ),
+                                                                )
+                                                            }
+                                                            None => {
+                                                                match other_params.split_once(' ') {
+                                                                    None => {
+                                                                        // !subscribe alerts turboflakes
+                                                                        commands.push(Commands::Subscribe(
+                                                                ReportType::Alerts(
+                                                                    Some(other_params.to_string()),
+                                                                    None,
+                                                                    None,
+                                                                ),
+                                                                message.sender.to_string(),
+                                                            ))
+                                                                    }
+                                                                    Some((
+                                                                        member,
+                                                                        other_params,
+                                                                    )) => {
+                                                                        match extract_mute_time(other_params) {
+                                                                Some(mute_time) => {
+                                                                    // !subscribe alerts turboflakes [10]
+                                                                    commands.push(
+                                                                        Commands::Subscribe(
+                                                                            ReportType::Alerts(
+                                                                                Some(
+                                                                                    member
+                                                                                        .to_string(
+                                                                                        ),
+                                                                                ),
+                                                                                None,
+                                                                                Some(mute_time),
+                                                                            ),
+                                                                            message
+                                                                                .sender
+                                                                                .to_string(),
+                                                                        ),
+                                                                    )
+                                                                }
+                                                                None => match other_params
+                                                                    .split_once(' ')
+                                                                {
+                                                                    Some((
+                                                                        severity,
+                                                                        other_params,
+                                                                    )) => match extract_mute_time(
+                                                                        other_params,
+                                                                    ) {
+                                                                        Some(mute_time) => {
+                                                                            // !subscribe alerts turboflakes high [10]
+                                                                            commands.push(Commands::Subscribe(
+                                                                            ReportType::Alerts(
+                                                                                Some(member.to_string()),
+                                                                                Some(severity.into()),
+                                                                                Some(mute_time),
+                                                                            ),
+                                                                            message.sender.to_string(),
+                                                                        ))
+                                                                        }
+                                                                        None => commands.push(
+                                                                            Commands::NotSupported,
+                                                                        ),
+                                                                    },
+                                                                    None => {
+                                                                        // !subscribe alerts turboflakes high
+                                                                        commands.push(Commands::Subscribe(
+                                                                    ReportType::Alerts(
+                                                                        Some(member.to_string()),
+                                                                        Some(other_params.into()),
+                                                                        None,
+                                                                    ),
                                                                     message.sender.to_string(),
                                                                 ))
-                                                            } else {
-                                                                commands
-                                                                    .push(Commands::NotSupported)
+                                                                    }
+                                                                },
+                                                            }
+                                                                    }
+                                                                }
                                                             }
                                                         }
-                                                    },
-                                                },
-                                                _ => commands.push(Commands::NotSupported),
-                                            },
-                                        },
-                                        "!unsubscribe" => match value.split_once(' ') {
-                                            None => commands.push(Commands::NotSupported),
-                                            Some((report_type, params)) => match report_type {
-                                                "alerts" => match params.split_once(' ') {
-                                                    None => commands.push(Commands::NotSupported),
-                                                    Some((member, severity)) => {
-                                                        commands.push(Commands::Unsubscribe(
-                                                            ReportType::Alerts(Some((
-                                                                member.to_string(),
-                                                                severity.into(),
-                                                                None,
-                                                            ))),
-                                                            message.sender.to_string(),
-                                                        ))
                                                     }
-                                                },
+                                                    _ => commands.push(Commands::NotSupported),
+                                                }
+                                            }
+                                        },
+                                        "!unsubscribe" => match other_params.split_once(' ') {
+                                            None => match other_params {
+                                                "alerts" => {
+                                                    // !unsubscribe alerts
+                                                    commands.push(Commands::UnsubscribeAll(
+                                                        ReportType::Alerts(None, None, None),
+                                                        message.sender.to_string(),
+                                                    ))
+                                                }
                                                 _ => commands.push(Commands::NotSupported),
                                             },
+                                            Some((report_type, other_params)) => {
+                                                match report_type {
+                                                    "alerts" => {
+                                                        match other_params.split_once(' ') {
+                                                            None => {
+                                                                // !unsubscribe alerts turboflakes
+                                                                commands.push(
+                                                                    Commands::Unsubscribe(
+                                                                        ReportType::Alerts(
+                                                                            Some(
+                                                                                other_params
+                                                                                    .to_string(),
+                                                                            ),
+                                                                            None,
+                                                                            None,
+                                                                        ),
+                                                                        message.sender.to_string(),
+                                                                    ),
+                                                                )
+                                                            }
+                                                            Some((member, other_params)) => {
+                                                                // !unsubscribe alerts turboflakes high
+                                                                commands.push(
+                                                                    Commands::Unsubscribe(
+                                                                        ReportType::Alerts(
+                                                                            Some(
+                                                                                member.to_string(),
+                                                                            ),
+                                                                            Some(
+                                                                                other_params.into(),
+                                                                            ),
+                                                                            None,
+                                                                        ),
+                                                                        message.sender.to_string(),
+                                                                    ),
+                                                                )
+                                                            }
+                                                        }
+                                                    }
+                                                    _ => commands.push(Commands::NotSupported),
+                                                }
+                                            }
                                         },
                                         _ => commands.push(Commands::NotSupported),
                                     },
@@ -1055,10 +1275,18 @@ impl Matrix {
 
     pub async fn reply_help(&self, room_id: &str) -> Result<(), MatrixError> {
         let mut message = String::from("✨ Supported commands:<br>");
-        message.push_str("<b>!subscribe alerts <i>MEMBER</i> <i>SEVERITY</i> [MUTE_INTERVAL]</b> - Subscribe to IBP-monitor alerts by MEMBER and SEVERITY. The parameter SEVERITY must match one of the options: [high, medium, low]. The parameter MUTE_INTERVAL is optional and is defined in minutes, e.g 10.<br>");
+        message.push_str("<b>!subscribe alerts [MUTE_INTERVAL]</b> - Subscribe to All IBP-monitor alerts from all members. The parameter MUTE_INTERVAL is optional and is defined in minutes, e.g 10.<br>");
+        message.push_str("<b>!subscribe alerts <i>MEMBER</i> [MUTE_INTERVAL]</b> - Subscribe to IBP-monitor alerts by MEMBER.<br>");
+        message.push_str("<b>!subscribe alerts <i>MEMBER</i> <i>SEVERITY</i> [MUTE_INTERVAL]</b> - Subscribe to IBP-monitor alerts by MEMBER and SEVERITY. The parameter SEVERITY must match one of the options: [high, medium, low].<br>");
+
+        message.push_str("<b>!unsubscribe alerts</b> - Unsubscribe to All IBP-monitor alerts.<br>");
+        message.push_str(
+            "<b>!unsubscribe alerts <i>MEMBER</i></b> - Unsubscribe to IBP-monitor alerts by MEMBER.<br>",
+        );
         message.push_str(
             "<b>!unsubscribe alerts <i>MEMBER</i> <i>SEVERITY</i></b> - Unsubscribe to IBP-monitor alerts by MEMBER and SEVERITY.<br>",
         );
+
         message.push_str("<b>!help</b> - Print this message.<br>");
         message.push_str("——<br>");
         message.push_str(&format!(
@@ -1219,4 +1447,23 @@ pub async fn add_matrix(cfg: &mut web::ServiceConfig) {
     });
     // let pool = create_pool(CONFIG.clone()).expect("failed to create Redis pool");
     cfg.app_data(web::Data::new(matrix));
+}
+
+fn extract_mute_time(input: &str) -> Option<u32> {
+    if let Ok(n) = input.trim_start_matches("[").trim_end_matches("]").parse() {
+        return Some(n);
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extract_mute_time_from_str() {
+        assert_eq!(extract_mute_time("[123]"), Some(123));
+        assert_eq!(extract_mute_time("123]"), Some(123));
+        assert_eq!(extract_mute_time("12e3]"), None);
+    }
 }
