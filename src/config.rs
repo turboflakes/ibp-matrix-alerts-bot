@@ -85,6 +85,7 @@ fn default_redis_database() -> u8 {
 #[derive(Clone, Deserialize, Debug)]
 pub struct Config {
     // general configuration
+    pub api_keys: Vec<String>,
     #[serde(default)]
     pub members_json_url: String,
     #[serde(default = "default_mute_time")]
@@ -131,6 +132,13 @@ fn get_config() -> Config {
     .version(env!("CARGO_PKG_VERSION"))
     .author(env!("CARGO_PKG_AUTHORS"))
     .about(env!("CARGO_PKG_DESCRIPTION"))
+    .arg(
+        Arg::with_name("api-keys")
+          .long("api-keys")
+          .takes_value(true)
+          .help(
+            "API Key to protect api endpoints. If needed specify more than one (e.g. api_key_1,api_key_2,api_key_3).",
+          ))
     .arg(
       Arg::with_name("matrix-bot-user")
         .long("matrix-bot-user")
@@ -189,6 +197,10 @@ fn get_config() -> Config {
                 info!("Loading configuration from {} file", &config_path);
             }
         }
+    }
+
+    if let Some(api_keys) = matches.value_of("api-keys") {
+        env::set_var("ABOT_API_KEYS", api_keys);
     }
 
     if let Some(members_json_url) = matches.value_of("members-json-url") {

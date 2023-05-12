@@ -19,23 +19,28 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use crate::api::guards::ApiKeyGuard;
-use crate::api::handlers::alerts::post_alert;
-use crate::api::handlers::index::get_index;
-use actix_web::web;
+use crate::config::CONFIG;
+use actix_web::guard::{Guard, GuardContext};
+use log::warn;
 
-/// All routes are placed here
-pub fn routes(cfg: &mut web::ServiceConfig) {
-    cfg
-        // Index
-        .route("/", web::get().to(get_index))
-        // /api/v1 routes
-        .service(
-            web::scope("/api/v1")
-                .guard(ApiKeyGuard)
-                // API info
-                .route("", web::get().to(get_index))
-                // Alerts route
-                .route("/alerts", web::post().to(post_alert)),
-        );
+pub struct ApiKeyGuard;
+
+impl Guard for ApiKeyGuard {
+    fn check(&self, ctx: &GuardContext<'_>) -> bool {
+        let config = CONFIG.clone();
+
+        let opt = ctx.head().headers().get("X-API-KEY");
+
+        if !opt.map_or(false, |hv| {
+            config
+                .api_keys
+                .iter()
+                .any(|ak| ak.as_bytes() == hv.as_bytes())
+        }) {
+            warn!("Invalid API-Key: {:?}", opt);
+            return false;
+        }
+
+        true
+    }
 }

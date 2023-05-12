@@ -89,7 +89,6 @@ pub async fn post_alert(
     new_alert: web::Json<Alert>,
     abot: web::Data<Abot>,
 ) -> Result<Json<Response>, ApiError> {
-    // let config = CONFIG.clone();
     let mut conn = get_conn(&abot.cache).await?;
 
     // 1st. get all subscribers for the type of alert received by member and severity

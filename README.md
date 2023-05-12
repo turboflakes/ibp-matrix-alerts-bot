@@ -15,3 +15,4 @@ Subscribe to Alerts published by ibp-monitor and delivery over matrix
 - [&check;] implement alert stats counters
     - [ ] !stats alerts
 - [&check;] define alert message template
+- [&check;] protect endpoint with API-Key
