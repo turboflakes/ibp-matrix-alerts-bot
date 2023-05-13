@@ -88,6 +88,8 @@ pub struct Config {
     pub api_keys: Vec<String>,
     #[serde(default)]
     pub members_json_url: String,
+    #[serde(default)]
+    pub ibp_monitor_url: String,
     #[serde(default = "default_mute_time")]
     pub mute_time: u32,
     #[serde(default = "default_error_interval")]

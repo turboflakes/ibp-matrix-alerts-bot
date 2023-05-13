@@ -19,7 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use crate::abot::{MemberId, ServiceId, Severity, Who};
+use crate::abot::{MemberId, ServiceId, Severity, Who, HealthCheckId};
 use crate::api::helpers::respond_json;
 use crate::cache::{get_conn, CacheKey};
 // use crate::config::CONFIG;
@@ -30,6 +30,7 @@ use actix_web::{web, web::Json};
 use chrono::Utc;
 use redis::aio::Connection;
 use serde::{Deserialize, Serialize};
+use serde_json::value::Value;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -43,34 +44,34 @@ pub struct Response {
     pub status: Status,
 }
 
-#[allow(dead_code)]
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct HealthCheckRecord {
-    monitor_id: String,
-    service_id: String,
-    member_id: String,
-    endpoint: String,
-    ip_address: String,
-    chain: String,
-    version: String,
-    performance: f64,
-}
+// #[allow(dead_code)]
+// #[derive(Debug, Deserialize)]
+// #[serde(rename_all = "camelCase")]
+// pub struct HealthCheckRecord {
+//     monitor_id: String,
+//     service_id: String,
+//     member_id: String,
+//     endpoint: String,
+//     ip_address: String,
+//     chain: String,
+//     version: String,
+//     performance: f64,
+// }
 
-#[allow(dead_code)]
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct HealthCheck {
-    monitor_id: String,
-    service_id: String,
-    member_id: String,
-    peer_id: String,
-    source: String,
-    r#type: String,
-    status: String,
-    response_time_ms: f64,
-    record: HealthCheckRecord,
-}
+// #[allow(dead_code)]
+// #[derive(Debug, Deserialize)]
+// #[serde(rename_all = "camelCase")]
+// pub struct HealthCheck {
+//     monitor_id: String,
+//     service_id: String,
+//     member_id: String,
+//     peer_id: String,
+//     source: String,
+//     r#type: String,
+//     status: String,
+//     response_time_ms: f64,
+//     record: HealthCheckRecord,
+// }
 
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]
@@ -81,7 +82,8 @@ pub struct Alert {
     message: String,
     member_id: MemberId,
     service_id: ServiceId,
-    health_checks: Vec<HealthCheck>,
+    health_check_id: HealthCheckId,
+    health_checks: Vec<Value>,
 }
 
 /// Handler to receive new alerts from monitor
@@ -142,12 +144,16 @@ pub async fn post_alert(
         // 4th send alert and update last_alert timestamp
         let now = Utc::now();
         if now.timestamp() > last_time_sent + (mute_time * 60) {
+            let record_serialized = serde_json::to_string(&new_alert.health_checks)?;
+
             let report = Report::from(RawAlert {
                 code: new_alert.code,
                 member_id: new_alert.member_id.to_owned(),
                 service_id: new_alert.service_id.to_owned(),
+                health_check_id: new_alert.health_check_id.to_owned(),
                 severity: new_alert.severity.clone(),
                 message: new_alert.message.to_owned(),
+                data: record_serialized
             });
 
             let _ = &abot
