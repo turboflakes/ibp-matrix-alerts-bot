@@ -19,7 +19,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use crate::abot::{MemberId, ServiceId, Severity, Who, HealthCheckId};
+use std::collections::HashMap;
+
+use crate::abot::{HealthCheckId, MemberId, ServiceId, Severity, Who};
 use crate::api::helpers::respond_json;
 use crate::cache::{get_conn, CacheKey};
 // use crate::config::CONFIG;
@@ -104,13 +106,18 @@ pub async fn post_alert(
         .map_err(CacheError::RedisCMDError)?;
 
     for subscriber in subscribers {
-        // 2nd. get last time the same alert code as been sent
+        // 2nd. get last time the same alert code:service as been sent
+        let key = format!(
+            "{}:{}",
+            new_alert.code.to_string(),
+            new_alert.service_id.to_string()
+        );
         let exists = redis::cmd("HEXISTS")
             .arg(CacheKey::LastAlerts(
                 subscriber.to_string(),
                 new_alert.member_id.to_string(),
             ))
-            .arg(new_alert.code.to_string())
+            .arg(&key)
             .query_async::<Connection, bool>(&mut conn)
             .await
             .map_err(CacheError::RedisCMDError)?;
@@ -121,7 +128,7 @@ pub async fn post_alert(
                     subscriber.to_string(),
                     new_alert.member_id.to_string(),
                 ))
-                .arg(new_alert.code.to_string())
+                .arg(&key)
                 .query_async::<Connection, i64>(&mut conn)
                 .await
                 .map_err(CacheError::RedisCMDError)?
@@ -153,7 +160,7 @@ pub async fn post_alert(
                 health_check_id: new_alert.health_check_id.to_owned(),
                 severity: new_alert.severity.clone(),
                 message: new_alert.message.to_owned(),
-                data: record_serialized
+                data: record_serialized,
             });
 
             let _ = &abot
@@ -166,13 +173,16 @@ pub async fn post_alert(
                 .await?;
 
             //
+            let data = HashMap::from([
+                (new_alert.code.to_string(), now.timestamp().to_string()),
+                (key, now.timestamp().to_string()),
+            ]);
             redis::cmd("HSET")
                 .arg(CacheKey::LastAlerts(
                     subscriber.to_string(),
                     new_alert.member_id.to_string(),
                 ))
-                .arg(new_alert.code.to_string())
-                .arg(now.timestamp().to_string())
+                .arg(data)
                 .query_async::<Connection, _>(&mut conn)
                 .await
                 .map_err(CacheError::RedisCMDError)?;
@@ -183,9 +193,13 @@ pub async fn post_alert(
         }
     }
 
+    let now = Utc::now();
     // 5th increment alert code counter
     redis::cmd("HINCRBY")
-        .arg(CacheKey::StatsByCode(new_alert.member_id.to_string()))
+        .arg(CacheKey::StatsByCode(
+            now.format("%y%m%d").to_string(),
+            new_alert.member_id.to_string(),
+        ))
         .arg(new_alert.code.to_string())
         .arg(1)
         .query_async::<Connection, _>(&mut conn)
@@ -194,8 +208,23 @@ pub async fn post_alert(
 
     // 6th increment alert severity counter
     redis::cmd("HINCRBY")
-        .arg(CacheKey::StatsBySeverity(new_alert.member_id.to_string()))
+        .arg(CacheKey::StatsBySeverity(
+            now.format("%y%m%d").to_string(),
+            new_alert.member_id.to_string(),
+        ))
         .arg(new_alert.severity.to_string())
+        .arg(1)
+        .query_async::<Connection, _>(&mut conn)
+        .await
+        .map_err(CacheError::RedisCMDError)?;
+
+    // 7th increment alert service counter
+    redis::cmd("HINCRBY")
+        .arg(CacheKey::StatsByService(
+            now.format("%y%m%d").to_string(),
+            new_alert.member_id.to_string(),
+        ))
+        .arg(new_alert.service_id.to_string())
         .arg(1)
         .query_async::<Connection, _>(&mut conn)
         .await

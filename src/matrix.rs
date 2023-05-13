@@ -48,6 +48,7 @@ pub type UserID = String;
 
 #[derive(Debug, Deserialize, Clone, PartialEq)]
 enum Commands {
+    Alerts,
     Help,
     Subscribe(ReportType, UserID),
     SubscribeAll(ReportType, UserID),
@@ -540,6 +541,7 @@ impl Matrix {
         let config = CONFIG.clone();
         for cmd in commands.iter() {
             match cmd {
+                Commands::Alerts => self.reply_alerts(&room_id).await?,
                 Commands::Help => self.reply_help(&room_id).await?,
                 Commands::Subscribe(report, who) => match report {
                     ReportType::Alerts(member_optional, severity_optional, mute_time_optional) => {
@@ -938,6 +940,8 @@ impl Matrix {
                                     None => {
                                         if body == "!help" {
                                             commands.push(Commands::Help);
+                                        } else if body == "!alerts" {
+                                            commands.push(Commands::Alerts);
                                         }
                                     }
                                     Some((cmd, other_params)) => match cmd {
@@ -1286,7 +1290,7 @@ impl Matrix {
         message.push_str(
             "<b>!unsubscribe alerts <i>MEMBER</i> <i>SEVERITY</i></b> - Unsubscribe to IBP-monitor alerts by MEMBER and SEVERITY.<br>",
         );
-
+        message.push_str("<b>!alerts</b> - Print all Alert Codes.<br>");
         message.push_str("<b>!help</b> - Print this message.<br>");
         message.push_str("——<br>");
         message.push_str(&format!(
@@ -1294,6 +1298,27 @@ impl Matrix {
             env!("CARGO_PKG_NAME"),
             env!("CARGO_PKG_VERSION")
         ));
+
+        return self
+            .send_room_message(&room_id, &message, Some(&message))
+            .await;
+    }
+
+    pub async fn reply_alerts(&self, room_id: &str) -> Result<(), MatrixError> {
+        let mut message = String::from("💡 Alert Codes:<br>");
+        message.push_str(
+            "<b>100</b> ― Indicates that the RPC service is most likely offline. Severity HIGH.<br>",
+        );
+        message.push_str(
+            "<b>101</b> ― Indicates that the chain is potentially halted. Severity HIGH.<br>",
+        );
+        message.push_str(
+            "<b>102</b> ― Indicates that the chain is having synchronization issues. Severity MEDIUM.<br>",
+        );
+        message.push_str(
+            "<b>103</b> ― Indicates a low performance from the RPC service. Severity LOW.<br>",
+        );
+        message.push_str("——<br>");
 
         return self
             .send_room_message(&room_id, &message, Some(&message))

@@ -73,14 +73,18 @@ pub async fn get_conn(pool: &RedisPool) -> Result<RedisConn, CacheError> {
     pool.get().await.map_err(CacheError::RedisPoolError)
 }
 
+// Date is represented by YYMMDD
+pub type Date = String;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum CacheKey {
     Members,                                   // Set
     Subscribers(MemberId, Severity),           // Set
     SubscriberConfig(Who, MemberId, Severity), // Hash
     LastAlerts(Who, MemberId),                 // Hash
-    StatsByCode(MemberId),                     // Hash
-    StatsBySeverity(MemberId),                 // Hash
+    StatsByCode(Date, MemberId),               // Hash
+    StatsBySeverity(Date, MemberId),           // Hash
+    StatsByService(Date, MemberId),            // Hash
 }
 
 impl std::fmt::Display for CacheKey {
@@ -98,11 +102,14 @@ impl std::fmt::Display for CacheKey {
             Self::LastAlerts(who, member) => {
                 write!(f, "abot:alerts:{}:{}", who, member)
             }
-            Self::StatsByCode(member) => {
-                write!(f, "abot:stats:{}:code", member)
+            Self::StatsByCode(date, member) => {
+                write!(f, "abot:stats:{}:{}:code", date, member)
             }
-            Self::StatsBySeverity(member) => {
-                write!(f, "abot:stats:{}:severity", member)
+            Self::StatsBySeverity(date, member) => {
+                write!(f, "abot:stats:{}:{}:severity", date, member)
+            }
+            Self::StatsByService(date, member) => {
+                write!(f, "abot:stats:{}:{}:service", date, member)
             }
         }
     }

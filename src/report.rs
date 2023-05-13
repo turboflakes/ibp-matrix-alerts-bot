@@ -19,9 +19,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use crate::abot::{MemberId, ServiceId, Severity, HealthCheckId};
-use log::info;
+use crate::abot::{HealthCheckId, MemberId, ServiceId, Severity};
 use crate::config::CONFIG;
+use log::info;
 
 type Body = Vec<String>;
 
@@ -77,20 +77,22 @@ impl From<RawAlert> for Report {
         let mut report = Report::new();
 
         report.add_raw_text(format!(
-            "🚨 <b>Alert code: {}</b> {}",
+            "🚨 <b>Alert [{}] ― {}</b> {}",
             data.code,
+            data.service_id,
             severity_emoji(data.severity)
         ));
 
-        report.add_raw_text(format!("‣ 🦸 {} ({})", data.member_id, data.service_id));
+        report.add_break();
 
-        report.add_raw_text(format!("‣ 💬 {}", data.message,));
+        report.add_raw_text(format!("💬 {}", data.message,));
 
-        report.add_raw_text(format!("‣ 🩺 ID <a href=\"{}/healthCheck/{}\">{}</a>",
-            config.ibp_monitor_url,
-            data.health_check_id,
-            data.health_check_id,
+        report.add_raw_text(format!(
+            "🩺 Health Check <a href=\"{}/healthCheck/{}\">#{}</a>",
+            config.ibp_monitor_url, data.health_check_id, data.health_check_id,
         ));
+
+        report.add_raw_text(format!("🦸 Member {}", data.member_id));
 
         // let mut clode_block = String::from("<pre><code>");
         // clode_block.push_str(&format!("{}", data.data.to_string()));
