@@ -103,6 +103,9 @@ pub type MemberId = String;
 // ServiceId represents the service from which the alert has been raised
 pub type ServiceId = String;
 
+// HealthCheckId represents the raw source of the alert, useful to link to external ibp-monitor
+pub type HealthCheckId = u32;
+
 // Who represents the user matrix handler who subscribed to a specific alert
 pub type Who = String;
 

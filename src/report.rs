@@ -19,8 +19,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use crate::abot::{MemberId, ServiceId, Severity};
+use crate::abot::{MemberId, ServiceId, Severity, HealthCheckId};
 use log::info;
+use crate::config::CONFIG;
 
 type Body = Vec<String>;
 
@@ -65,11 +66,14 @@ pub struct RawAlert {
     pub message: String,
     pub member_id: MemberId,
     pub service_id: ServiceId,
+    pub health_check_id: HealthCheckId,
+    pub data: String,
 }
 
 impl From<RawAlert> for Report {
     /// Converts an ibp-monitor `Alert` into a [`Report`].
     fn from(data: RawAlert) -> Report {
+        let config = CONFIG.clone();
         let mut report = Report::new();
 
         report.add_raw_text(format!(
@@ -81,6 +85,17 @@ impl From<RawAlert> for Report {
         report.add_raw_text(format!("‣ 🦸 {} ({})", data.member_id, data.service_id));
 
         report.add_raw_text(format!("‣ 💬 {}", data.message,));
+
+        report.add_raw_text(format!("‣ 🩺 ID <a href=\"{}/healthCheck/{}\">{}</a>",
+            config.ibp_monitor_url,
+            data.health_check_id,
+            data.health_check_id,
+        ));
+
+        // let mut clode_block = String::from("<pre><code>");
+        // clode_block.push_str(&format!("{}", data.data.to_string()));
+        // clode_block.push_str("\n</code></pre>");
+        // report.add_raw_text(clode_block);
 
         report.add_raw_text("——".into());
         report.add_break();
