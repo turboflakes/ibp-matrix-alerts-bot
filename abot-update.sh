@@ -24,12 +24,12 @@
 # > make a file executable
 # chmod +x ./abot-update.sh
 
-DIRNAME="~/abot-bot"
+DIRNAME="/opt/abot-cli"
 FILENAME="$DIRNAME/abot"
 
 read -p "Enter the IBP-Alert bot version that you would like to download (e.g.: 0.1.2): " INPUT_VERSION
 if [ "$INPUT_VERSION" = "" ]; then
-                    INPUT_VERSION="0.5.2"
+        INPUT_VERSION="0.1.2"
 fi
 
 URI="https://github.com/ibp-network/ibp-matrix-alerts-bot/releases/download/v$INPUT_VERSION/abot"
