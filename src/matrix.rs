@@ -1347,6 +1347,7 @@ impl Matrix {
         message.push_str(
             "<b>!unsubscribe alerts <i>MEMBER</i> <i>SEVERITY</i></b> - Unsubscribe to IBP-monitor alerts by MEMBER and SEVERITY.<br>",
         );
+        message.push_str("<b>!maintenance <i>MEMBER</i> <i>MODE</i></b> - Set/Unset site under maintenance. All alerts will be muted during the maintenance period. The parameter MODE must match one of the options: [on, off].<br>");
         message.push_str("<b>!alerts</b> - Print all Alert Codes.<br>");
         message.push_str("<b>!help</b> - Print this message.<br>");
         message.push_str("——<br>");
