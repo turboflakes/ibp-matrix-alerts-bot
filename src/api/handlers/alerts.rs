@@ -21,9 +21,10 @@
 
 use std::collections::HashMap;
 
-use crate::abot::{HealthCheckId, MemberId, ServiceId, Severity, Who};
+use crate::abot::{HealthCheckId, MemberId, ServiceId, Severity};
 use crate::api::helpers::respond_json;
 use crate::cache::{get_conn, CacheKey};
+use crate::matrix::UserID;
 // use crate::config::CONFIG;
 use crate::errors::{ApiError, CacheError};
 use crate::report::{RawAlert, Report};
@@ -38,12 +39,12 @@ use serde_json::value::Value;
 #[serde(rename_all = "lowercase")]
 pub enum Status {
     Delivered,
-    Skipped,
+    _Skipped,
 }
 
 #[derive(Debug, Serialize)]
 pub struct Response {
-    pub status: Status,
+    data: Vec<(UserID, Status)>,
 }
 
 // #[allow(dead_code)]
@@ -101,9 +102,11 @@ pub async fn post_alert(
             new_alert.member_id.to_string(),
             new_alert.severity.clone(),
         ))
-        .query_async::<Connection, Vec<Who>>(&mut conn)
+        .query_async::<Connection, Vec<UserID>>(&mut conn)
         .await
         .map_err(CacheError::RedisCMDError)?;
+
+    let mut resp_data: Vec<(UserID, Status)> = Vec::new();
 
     for subscriber in subscribers {
         // 2nd. get last time the same alert code:service as been sent
@@ -187,9 +190,7 @@ pub async fn post_alert(
                 .await
                 .map_err(CacheError::RedisCMDError)?;
 
-            return respond_json(Response {
-                status: Status::Delivered,
-            });
+            resp_data.push((subscriber, Status::Delivered));
         }
     }
 
@@ -230,7 +231,5 @@ pub async fn post_alert(
         .await
         .map_err(CacheError::RedisCMDError)?;
 
-    respond_json(Response {
-        status: Status::Skipped,
-    })
+    respond_json(Response { data: resp_data })
 }
