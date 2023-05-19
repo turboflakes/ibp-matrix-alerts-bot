@@ -27,6 +27,7 @@ use crate::errors::{CacheError, MatrixError};
 use actix_web::web;
 use async_recursion::async_recursion;
 use base64::encode;
+use chrono::Utc;
 use log::{debug, info, warn};
 use redis::aio::Connection;
 use serde::{Deserialize, Serialize};
@@ -54,6 +55,7 @@ enum Commands {
     SubscribeAll(ReportType, UserID),
     Unsubscribe(ReportType, UserID),
     UnsubscribeAll(ReportType, UserID),
+    Maintenance(ReportType, UserID),
     NotSupported,
 }
 
@@ -588,6 +590,7 @@ impl Matrix {
                             }
                         }
                     }
+                    _ => (),
                 },
                 Commands::SubscribeAll(report, who) => match report {
                     ReportType::Alerts(_, _, mute_time_optional) => {
@@ -620,6 +623,7 @@ impl Matrix {
                         self.send_private_message(who, &message, Some(&message))
                             .await?;
                     }
+                    _ => (),
                 },
                 Commands::Unsubscribe(report, who) => match report {
                     ReportType::Alerts(member_optional, severity_optional, _) => {
@@ -666,6 +670,7 @@ impl Matrix {
                             }
                         }
                     }
+                    _ => (),
                 },
                 Commands::UnsubscribeAll(report, who) => match report {
                     ReportType::Alerts(_, _, _) => {
@@ -691,6 +696,46 @@ impl Matrix {
                         self.send_private_message(who, &message, Some(&message))
                             .await?;
                     }
+                    _ => (),
+                },
+                // Maintenace command will just mute all alerts for the member
+                Commands::Maintenance(report, who) => match report {
+                    ReportType::Maintenance(Some((member, mode))) => {
+                        let mut conn = get_conn(&self.cache).await?;
+
+                        let is_member = redis::cmd("SISMEMBER")
+                            .arg(CacheKey::Members)
+                            .arg(member.to_string())
+                            .query_async::<Connection, bool>(&mut conn)
+                            .await
+                            .map_err(CacheError::RedisCMDError)?;
+
+                        if is_member {
+                            let mut data: BTreeMap<String, String> = BTreeMap::new();
+                            data.insert(String::from("mode"), mode.to_string());
+                            let now = Utc::now();
+                            data.insert(String::from("changed"), now.timestamp().to_string());
+
+                            redis::cmd("HSET")
+                                .arg(CacheKey::Maintenance(member.to_string()))
+                                .arg(data)
+                                .query_async::<Connection, _>(&mut conn)
+                                .await
+                                .map_err(CacheError::RedisCMDError)?;
+
+                            let message = format!("{}", report.name());
+                            self.send_private_message(who, &message, Some(&message))
+                                .await?;
+                        } else {
+                            let message = format!(
+                                "❓ No Member with ID <b>{}</b> defined",
+                                member.to_string()
+                            );
+                            self.send_private_message(who, &message, Some(&message))
+                                .await?;
+                        }
+                    }
+                    _ => (),
                 },
                 _ => (),
             }
@@ -1108,6 +1153,18 @@ impl Matrix {
                                                     }
                                                     _ => commands.push(Commands::NotSupported),
                                                 }
+                                            }
+                                        },
+                                        "!maintenance" => match other_params.split_once(' ') {
+                                            None => commands.push(Commands::NotSupported),
+                                            Some((member, mode)) => {
+                                                commands.push(Commands::Maintenance(
+                                                    ReportType::Maintenance(Some((
+                                                        member.to_string(),
+                                                        mode.into(),
+                                                    ))),
+                                                    message.sender.to_string(),
+                                                ))
                                             }
                                         },
                                         _ => commands.push(Commands::NotSupported),

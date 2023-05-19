@@ -83,6 +83,7 @@ pub enum CacheKey {
     Subscribers(MemberId, Severity),              // Set
     SubscriberConfig(UserID, MemberId, Severity), // Hash
     LastAlerts(UserID, MemberId),                 // Hash
+    Maintenance(MemberId),                        // Hash
     StatsByCode(Date, MemberId),                  // Hash
     StatsBySeverity(Date, MemberId),              // Hash
     StatsByService(Date, MemberId),               // Hash
@@ -102,6 +103,9 @@ impl std::fmt::Display for CacheKey {
             }
             Self::LastAlerts(who, member) => {
                 write!(f, "abot:alerts:{}:{}", who, member)
+            }
+            Self::Maintenance(member) => {
+                write!(f, "abot:maintenance:{}", member)
             }
             Self::StatsByCode(date, member) => {
                 write!(f, "abot:stats:{}:{}:code", date, member)

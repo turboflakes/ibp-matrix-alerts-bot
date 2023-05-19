@@ -19,12 +19,11 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use std::collections::HashMap;
-
-use crate::abot::{HealthCheckId, MemberId, ServiceId, Severity};
+use crate::abot::{HealthCheckId, MaintenanceMode, MemberId, ServiceId, Severity};
 use crate::api::helpers::respond_json;
 use crate::cache::{get_conn, CacheKey};
 use crate::matrix::UserID;
+use std::collections::HashMap;
 // use crate::config::CONFIG;
 use crate::errors::{ApiError, CacheError};
 use crate::report::{RawAlert, Report};
@@ -96,7 +95,20 @@ pub async fn post_alert(
 ) -> Result<Json<Response>, ApiError> {
     let mut conn = get_conn(&abot.cache).await?;
 
-    // 1st. get all subscribers for the type of alert received by member and severity
+    // get maintenance status for the member in the alert
+    let maintenance_mode = redis::cmd("HGET")
+        .arg(CacheKey::Maintenance(new_alert.member_id.to_string()))
+        .arg("mode".to_string())
+        .query_async::<Connection, MaintenanceMode>(&mut conn)
+        .await
+        .map_err(CacheError::RedisCMDError)?;
+
+    // if maintenance is active for the member skip alerts
+    if maintenance_mode == MaintenanceMode::On {
+        return respond_json(Response { data: vec![] });
+    }
+
+    // get all subscribers for the type of alert received by member and severity
     let subscribers = redis::cmd("SMEMBERS")
         .arg(CacheKey::Subscribers(
             new_alert.member_id.to_string(),
@@ -109,7 +121,7 @@ pub async fn post_alert(
     let mut resp_data: Vec<(UserID, Status)> = Vec::new();
 
     for subscriber in subscribers {
-        // 2nd. get last time the same alert code:service as been sent
+        // get last time the same alert code:service as been sent
         let key = format!(
             "{}:{}",
             new_alert.code.to_string(),
@@ -139,7 +151,7 @@ pub async fn post_alert(
             0
         };
 
-        // 3rd get mute time defined by the user
+        // get mute time defined by the user
         let mute_time = redis::cmd("HGET")
             .arg(CacheKey::SubscriberConfig(
                 subscriber.to_string(),
@@ -151,7 +163,7 @@ pub async fn post_alert(
             .await
             .map_err(CacheError::RedisCMDError)?;
 
-        // 4th send alert and update last_alert timestamp
+        // send alert and update last_alert timestamp
         let now = Utc::now();
         if now.timestamp() > last_time_sent + (mute_time * 60) {
             let record_serialized = serde_json::to_string(&new_alert.health_checks)?;
@@ -195,7 +207,7 @@ pub async fn post_alert(
     }
 
     let now = Utc::now();
-    // 5th increment alert code counter
+    // increment alert code counter
     redis::cmd("HINCRBY")
         .arg(CacheKey::StatsByCode(
             now.format("%y%m%d").to_string(),
@@ -207,7 +219,7 @@ pub async fn post_alert(
         .await
         .map_err(CacheError::RedisCMDError)?;
 
-    // 6th increment alert severity counter
+    // increment alert severity counter
     redis::cmd("HINCRBY")
         .arg(CacheKey::StatsBySeverity(
             now.format("%y%m%d").to_string(),
@@ -219,7 +231,7 @@ pub async fn post_alert(
         .await
         .map_err(CacheError::RedisCMDError)?;
 
-    // 7th increment alert service counter
+    // increment alert service counter
     redis::cmd("HINCRBY")
         .arg(CacheKey::StatsByService(
             now.format("%y%m%d").to_string(),
