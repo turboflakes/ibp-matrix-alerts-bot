@@ -106,9 +106,6 @@ pub type ServiceId = String;
 // HealthCheckId represents the raw source of the alert, useful to link to external ibp-monitor
 pub type HealthCheckId = u32;
 
-// Who represents the user matrix handler who subscribed to a specific alert
-pub type Who = String;
-
 #[derive(Debug, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum Severity {
@@ -116,9 +113,6 @@ pub enum Severity {
     Medium,
     Low,
 }
-
-// MuteTime represented in minutes
-pub type MuteTime = u32;
 
 impl std::fmt::Display for Severity {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -159,9 +153,64 @@ impl From<&str> for Severity {
     }
 }
 
+// MuteTime represented in minutes
+pub type MuteTime = u32;
+
+#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum MaintenanceMode {
+    On,
+    Off,
+}
+
+impl std::fmt::Display for MaintenanceMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::On => write!(f, "on"),
+            Self::Off => write!(f, "off"),
+        }
+    }
+}
+
+impl From<&str> for MaintenanceMode {
+    fn from(mode: &str) -> Self {
+        match mode {
+            "on" => MaintenanceMode::On,
+            "off" => MaintenanceMode::Off,
+            _ => MaintenanceMode::Off,
+        }
+    }
+}
+
+impl From<String> for MaintenanceMode {
+    fn from(mode: String) -> Self {
+        let mode = mode.as_str();
+        match mode {
+            "on" => MaintenanceMode::On,
+            "off" => MaintenanceMode::Off,
+            _ => MaintenanceMode::Off,
+        }
+    }
+}
+
+impl redis::FromRedisValue for MaintenanceMode {
+    fn from_redis_value(v: &redis::Value) -> redis::RedisResult<Self> {
+        let mode = match v {
+            redis::Value::Data(buf) => {
+                let s = String::from_utf8_lossy(buf).to_string();
+                s.into()
+            }
+            _ => MaintenanceMode::Off,
+        };
+
+        redis::RedisResult::Ok(mode)
+    }
+}
+
 #[derive(Debug, Deserialize, Clone, PartialEq)]
 pub enum ReportType {
     Alerts(Option<MemberId>, Option<Severity>, Option<MuteTime>),
+    Maintenance(Option<(MemberId, MaintenanceMode)>),
 }
 
 impl ReportType {
@@ -197,6 +246,15 @@ impl ReportType {
                     format!("All Alerts from all members")
                 }
             }
+            Self::Maintenance(Some((member_id, mode))) => match mode {
+                MaintenanceMode::On => format!(
+                    "🚧 {} site is under maintenance → alerts are muted 🔇",
+                    member_id
+                ),
+                MaintenanceMode::Off => {
+                    format!("💚 {} site is back online → alerts are on 🔊", member_id)
+                }
+            },
             _ => unimplemented!(),
         }
     }
@@ -206,6 +264,7 @@ impl std::fmt::Display for ReportType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Alerts(_option_1, _option_2, _option_3) => write!(f, "Alerts"),
+            Self::Maintenance(_option_1) => write!(f, "Maintenance"),
         }
     }
 }

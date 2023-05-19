@@ -19,9 +19,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use crate::abot::{MemberId, Severity, Who};
+use crate::abot::{MemberId, Severity};
 use crate::config::Config;
 use crate::errors::CacheError;
+use crate::matrix::UserID;
 use log::{error, info};
 use mobc::{Connection, Pool};
 use mobc_redis::RedisConnectionManager;
@@ -78,13 +79,14 @@ pub type Date = String;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum CacheKey {
-    Members,                                   // Set
-    Subscribers(MemberId, Severity),           // Set
-    SubscriberConfig(Who, MemberId, Severity), // Hash
-    LastAlerts(Who, MemberId),                 // Hash
-    StatsByCode(Date, MemberId),               // Hash
-    StatsBySeverity(Date, MemberId),           // Hash
-    StatsByService(Date, MemberId),            // Hash
+    Members,                                      // Set
+    Subscribers(MemberId, Severity),              // Set
+    SubscriberConfig(UserID, MemberId, Severity), // Hash
+    LastAlerts(UserID, MemberId),                 // Hash
+    Maintenance(MemberId),                        // Hash
+    StatsByCode(Date, MemberId),                  // Hash
+    StatsBySeverity(Date, MemberId),              // Hash
+    StatsByService(Date, MemberId),               // Hash
 }
 
 impl std::fmt::Display for CacheKey {
@@ -101,6 +103,9 @@ impl std::fmt::Display for CacheKey {
             }
             Self::LastAlerts(who, member) => {
                 write!(f, "abot:alerts:{}:{}", who, member)
+            }
+            Self::Maintenance(member) => {
+                write!(f, "abot:maintenance:{}", member)
             }
             Self::StatsByCode(date, member) => {
                 write!(f, "abot:stats:{}:{}:code", date, member)

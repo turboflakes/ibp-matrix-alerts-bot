@@ -9,6 +9,7 @@ Subscribe to Alerts published by ibp-monitor and delivery over matrix
 - [&check;] review matrix commands:
     - [&check;] !subscribe alerts MEMBER SEVERITY [MUTE_INTERVAL]
     - [&check;] !unsubscribe alerts MEMBER SEVERITY
+    - [&check;] !maintenance MEMBER MODE
     - [&check;] !alerts
     - [&check;] !help
     - [ ] !stats alerts
