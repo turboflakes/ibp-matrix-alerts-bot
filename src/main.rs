@@ -20,25 +20,26 @@
 // SOFTWARE.
 
 mod abot;
-mod api;
+// mod api;
 mod cache;
 mod config;
 mod errors;
 mod matrix;
+mod monitor;
 mod report;
 
 use crate::abot::Abot;
-use crate::api::routes::routes;
+// use crate::api::routes::routes;
 use crate::config::CONFIG;
 use log::info;
 use std::env;
 
 // use actix::*;
-use actix_cors::Cors;
-use actix_web::{http, middleware, web, App, HttpServer};
+// use actix_cors::Cors;
+// use actix_web::{http, middleware, web, App, HttpServer};
 
-#[actix_web::main]
-async fn main() -> std::io::Result<()> {
+// #[actix_web::main]
+fn main() {
     // load configuration
     let config = CONFIG.clone();
 
@@ -59,32 +60,33 @@ async fn main() -> std::io::Result<()> {
     // authenticate matrix user, load and process commands from matrix rooms
     Abot::start();
 
-    // create a new instance to be shared with all webhooks
-    let abot = Abot::new().await;
+    // DEPRECATED
+    // // create a new instance to be shared with all webhooks
+    // let abot = Abot::new().await;
 
-    // start http webhooks server
-    let addr = format!("{}:{}", config.api_host, config.api_port);
-    HttpServer::new(move || {
-        let cors = Cors::default()
-            .allowed_origin_fn(|origin, _req_head| {
-                let allowed_origins =
-                    env::var("ABOT_API_CORS_ALLOW_ORIGIN").unwrap_or("*".to_string());
-                let allowed_origins = allowed_origins.split(",").collect::<Vec<_>>();
-                allowed_origins
-                    .iter()
-                    .any(|e| e.as_bytes() == origin.as_bytes())
-            })
-            .allowed_methods(vec!["GET", "POST", "OPTIONS"])
-            .allowed_headers(vec![http::header::CONTENT_TYPE])
-            .supports_credentials()
-            .max_age(3600);
-        App::new()
-            .app_data(web::Data::new(abot.clone()))
-            .wrap(middleware::Logger::default())
-            .wrap(cors)
-            .configure(routes)
-    })
-    .bind(addr)?
-    .run()
-    .await
+    // // start http webhooks server
+    // let addr = format!("{}:{}", config.api_host, config.api_port);
+    // HttpServer::new(move || {
+    //     let cors = Cors::default()
+    //         .allowed_origin_fn(|origin, _req_head| {
+    //             let allowed_origins =
+    //                 env::var("ABOT_API_CORS_ALLOW_ORIGIN").unwrap_or("*".to_string());
+    //             let allowed_origins = allowed_origins.split(",").collect::<Vec<_>>();
+    //             allowed_origins
+    //                 .iter()
+    //                 .any(|e| e.as_bytes() == origin.as_bytes())
+    //         })
+    //         .allowed_methods(vec!["GET", "POST", "OPTIONS"])
+    //         .allowed_headers(vec![http::header::CONTENT_TYPE])
+    //         .supports_credentials()
+    //         .max_age(3600);
+    //     App::new()
+    //         .app_data(web::Data::new(abot.clone()))
+    //         .wrap(middleware::Logger::default())
+    //         .wrap(cors)
+    //         .configure(routes)
+    // })
+    // .bind(addr)?
+    // .run()
+    // .await
 }

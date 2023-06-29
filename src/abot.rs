@@ -23,12 +23,13 @@ use crate::cache::{create_or_await_pool, get_conn, CacheKey, RedisPool};
 use crate::config::CONFIG;
 use crate::errors::{AbotError, CacheError};
 use crate::matrix::Matrix;
+use crate::monitor::client::try_to_connect_monitor;
 use log::error;
 use redis::aio::Connection;
 use reqwest::Url;
 use serde::Deserialize;
 use std::collections::HashMap;
-use std::{result::Result, thread, time};
+use std::{result::Result, sync::mpsc, thread, time};
 
 #[derive(Clone)]
 pub struct Abot {
@@ -58,19 +59,39 @@ impl Abot {
 
     /// Spawn and restart on error
     pub fn start() {
+        let (ctrlc_tx, ctrlc_rx) = mpsc::channel();
+
+        ctrlc::set_handler(move || {
+            ctrlc_tx
+                .send(())
+                .expect("Could not send signal on channel.")
+        })
+        .expect("Error setting Ctrl-C handler");
+
         // Fetch and cache member Ids
         spawn_and_fetch_members_from_remote_url();
 
         // Authenticate matrix and spawn lazy load commands
         spawn_and_restart_matrix_lazy_load_on_error();
+
+        // Try connect to monitor
+        try_to_connect_monitor();
+
+        // wait for SIGINT, SIGTERM, SIGHUP
+        ctrlc_rx
+            .recv()
+            .expect("could not receive signal from channel.");
     }
 }
 
 // spawns a task to fetch and cache member ids from remote config file
 fn spawn_and_fetch_members_from_remote_url() {
     async_std::task::spawn(async {
+        let config = CONFIG.clone();
         if let Err(e) = try_fetch_members_from_remote_url().await {
             error!("fetch members error: {}", e);
+            thread::sleep(time::Duration::from_secs(config.error_interval));
+            spawn_and_fetch_members_from_remote_url()
         }
     });
 }

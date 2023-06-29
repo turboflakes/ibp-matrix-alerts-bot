@@ -49,12 +49,17 @@ fn default_mute_time() -> u32 {
 
 /// provides default value (minutes) for error interval if ABOT_ERROR_INTERVAL env var is not set
 fn default_error_interval() -> u64 {
-    30
+    10
 }
 
 /// provides default value for data_path if ABOT_DATA_PATH env var is not set
 fn default_data_path() -> String {
     "./".into()
+}
+
+/// provides default value (minutes) for error interval if ONET_MONITOR_API_URL env var is not set
+fn default_monitor_api_url() -> String {
+    "ws://localhost:30001".into()
 }
 
 /// provides default value for api_host if ONET_API_HOST env var is not set
@@ -111,6 +116,11 @@ pub struct Config {
     pub matrix_public_room_disabled: bool,
     #[serde(default)]
     pub matrix_bot_display_name_disabled: bool,
+    // monitor api
+    #[serde(default = "default_monitor_api_url")]
+    pub monitor_api_url: String,
+    #[serde(default)]
+    pub monitor_api_key: String,
     // api
     #[serde(default = "default_api_host")]
     pub api_host: String,
@@ -130,6 +140,7 @@ pub struct Config {
 /// Inject dotenv and env vars into the Config struct
 fn get_config() -> Config {
     // Define CLI flags with clap
+    let error_interval = default_error_interval().to_string();
     let matches = App::new(env!("CARGO_PKG_NAME"))
     .version(env!("CARGO_PKG_VERSION"))
     .author(env!("CARGO_PKG_AUTHORS"))
@@ -169,8 +180,8 @@ fn get_config() -> Config {
       Arg::with_name("error-interval")
         .long("error-interval")
         .takes_value(true)
-        .default_value("30")
-        .help("Interval value (in minutes) from which the bot restarts after a critical error."))
+        .default_value(&error_interval)
+        .help("Interval value (in seconds) from which the bot restarts after a critical error."))
     .arg(
         Arg::with_name("debug")
           .long("debug")

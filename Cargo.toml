@@ -28,6 +28,8 @@ async-std = { version = "1.11.0", features = ["attributes", "tokio1"] }
 redis = { version = "0.22.0", features = ["async-std-comp"] }
 mobc = { version = "0.8", default-features = false, features = ["async-std"] }
 mobc-redis = { version = "0.8", default-features = false, features = ["async-std-comp"] }
+ctrlc = { version = "3.0", features = ["termination"] }
 actix = "0.13"
 actix-web = "4"
 actix-cors = "0.6"
+rust_socketio = { version = "0.4.2" }
