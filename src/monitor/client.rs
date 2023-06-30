@@ -125,6 +125,12 @@ pub struct ArchiveState {
     spec_version: String,
 }
 
+#[derive(Debug, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ChainType {
+    live: Option<String>,
+}
+
 #[derive(Debug, Default)]
 pub struct Record {
     monitor_id: String,
@@ -133,6 +139,7 @@ pub struct Record {
     endpoint: String,
     ip_address: String,
     chain: String,
+    chain_type: ChainType,
     health: Health,
     sync_state: SyncState,
     finalized_block: u32,
@@ -159,6 +166,7 @@ impl<'de> Deserialize<'de> for Record {
             Endpoint,
             IpAddress,
             Chain,
+            ChainType,
             Health,
             SyncState,
             FinalizedBlock,
@@ -186,6 +194,7 @@ impl<'de> Deserialize<'de> for Record {
                 let mut endpoint: Option<String> = None;
                 let mut ip_address: Option<String> = None;
                 let mut chain: Option<String> = None;
+                let mut chain_type: Option<ChainType> = None;
                 let mut health: Option<Health> = None;
                 let mut sync_state: Option<SyncState> = None;
                 let mut finalized_block: Option<u32> = None;
@@ -231,6 +240,12 @@ impl<'de> Deserialize<'de> for Record {
                             }
                             chain = Some(map.next_value()?);
                         }
+                        Field::ChainType => {
+                            if chain_type.is_some() {
+                                return Err(serde::de::Error::duplicate_field("chain_type"));
+                            }
+                            chain_type = Some(map.next_value()?);
+                        }
                         Field::Health => {
                             if health.is_some() {
                                 return Err(serde::de::Error::duplicate_field("health"));
@@ -275,6 +290,7 @@ impl<'de> Deserialize<'de> for Record {
                 let endpoint = endpoint.unwrap_or_default();
                 let ip_address = ip_address.unwrap_or_default();
                 let chain = chain.unwrap_or_default();
+                let chain_type = chain_type.unwrap_or_default();
                 let health = health.unwrap_or_default();
                 let sync_state = sync_state.unwrap_or_default();
                 let finalized_block = finalized_block.unwrap_or_default();
@@ -289,6 +305,7 @@ impl<'de> Deserialize<'de> for Record {
                     endpoint,
                     ip_address,
                     chain,
+                    chain_type,
                     health,
                     sync_state,
                     finalized_block,
@@ -306,6 +323,7 @@ impl<'de> Deserialize<'de> for Record {
             "endpoint",
             "ip_address",
             "chain",
+            "chain_type",
             "health",
             "sync_state",
             "finalized_block",
@@ -325,6 +343,7 @@ impl Record {
         endpoint: String,
         ip_address: String,
         chain: String,
+        chain_type: ChainType,
         health: Health,
         sync_state: SyncState,
         finalized_block: u32,
@@ -339,6 +358,7 @@ impl Record {
             endpoint,
             ip_address,
             chain,
+            chain_type,
             health,
             sync_state,
             finalized_block,
@@ -618,7 +638,7 @@ mod tests {
 
     #[test]
     fn it_deserializes_record_struct() {
-        let str = "{\"monitorId\":\"12D3KooWK88CwRP1eHSoHheuQbXFcQrQMni2cgVDmB8bu9NtaqVu\",\"memberId\":\"stakeplus\",\"serviceId\":\"statemint-rpc\",\"endpoint\":\"wss://sys.dotters.network/statemint\",\"ipAddress\":\"192.96.202.175\",\"chain\":\"Statemint\",\"health\":{\"peers\":9,\"isSyncing\":false,\"shouldHavePeers\":true},\"syncState\":{\"startingBlock\":4030413,\"currentBlock\":4035043,\"highestBlock\":4035043},\"finalizedBlock\":4035043,\"version\":\"0.9.420-843a5095544\",\"performance\":81.42337107658386}".to_string();
+        let str = "{\"monitorId\":\"12D3KooWK88CwRP1eHSoHheuQbXFcQrQMni2cgVDmB8bu9NtaqVu\",\"memberId\":\"stakeplus\",\"serviceId\":\"statemint-rpc\",\"endpoint\":\"wss://sys.dotters.network/statemint\",\"ipAddress\":\"192.96.202.175\",\"chain\":\"Statemint\",\"chainType\":{\"live\": null},\"health\":{\"peers\":9,\"isSyncing\":false,\"shouldHavePeers\":true},\"syncState\":{\"startingBlock\":4030413,\"currentBlock\":4035043,\"highestBlock\":4035043},\"finalizedBlock\":4035043,\"version\":\"0.9.420-843a5095544\",\"performance\":81.42337107658386}".to_string();
         let a: Record = serde_json::from_str(&str).unwrap_or_default();
         let b = Record {
             member_id: "stakeplus".to_string(),
@@ -627,6 +647,7 @@ mod tests {
             endpoint: "wss://sys.dotters.network/statemint".to_string(),
             ip_address: "192.96.202.175".to_string(),
             chain: "Statemint".to_string(),
+            chain_type: ChainType { live: None },
             version: "0.9.420-843a5095544".to_string(),
             finalized_block: 4035043,
             performance: 81.42337107658386,
@@ -638,6 +659,7 @@ mod tests {
         assert_eq!(a.endpoint, b.endpoint);
         assert_eq!(a.ip_address, b.ip_address);
         assert_eq!(a.chain, b.chain);
+        assert_eq!(a.chain_type, b.chain_type);
         assert_eq!(a.version, b.version);
         assert_eq!(a.finalized_block, b.finalized_block);
         assert_eq!(a.performance, b.performance);
