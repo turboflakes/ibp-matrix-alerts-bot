@@ -34,6 +34,19 @@ use redis::aio::Connection;
 use serde::{Deserialize, Serialize};
 use serde_json::value::Value;
 
+const WHITELIST_SERVICES: [&'static str; 10] = [
+    "polkadot-rpc",
+    "kusama-rpc",
+    "westend-rpc",
+    "statemint-rpc",
+    "statemine-rpc",
+    "westmint-rpc",
+    "collectives-polkadot-rpc",
+    "collectives-westend-rpc",
+    "bridgehub-kusama-rpc",
+    "encointer-kusama-rpc",
+];
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Status {
@@ -165,7 +178,9 @@ pub async fn post_alert(
 
         // send alert and update last_alert timestamp
         let now = Utc::now();
-        if now.timestamp() > last_time_sent + (mute_time * 60) {
+        if now.timestamp() > last_time_sent + (mute_time * 60)
+            && WHITELIST_SERVICES.contains(&&new_alert.service_id[..])
+        {
             let record_serialized = serde_json::to_string(&new_alert.health_checks)?;
 
             let report = Report::from(RawAlert {
