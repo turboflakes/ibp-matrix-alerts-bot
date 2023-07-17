@@ -43,7 +43,9 @@ const WHITELIST_SERVICES: [&'static str; 10] = [
     "westmint-rpc",
     "collectives-polkadot-rpc",
     "collectives-westend-rpc",
+    "bridgehub-polkadot-rpc",
     "bridgehub-kusama-rpc",
+    "bridgehub-westend-rpc",
     "encointer-kusama-rpc",
 ];
 
