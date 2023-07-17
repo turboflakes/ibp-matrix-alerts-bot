@@ -34,7 +34,7 @@ use redis::aio::Connection;
 use serde::{Deserialize, Serialize};
 use serde_json::value::Value;
 
-const WHITELIST_SERVICES: [&'static str; 10] = [
+const WHITELIST_SERVICES: [&'static str; 12 = [
     "polkadot-rpc",
     "kusama-rpc",
     "westend-rpc",
